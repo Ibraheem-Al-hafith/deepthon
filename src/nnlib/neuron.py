@@ -18,7 +18,7 @@ class Neuron(Module):
     the neuron should be able to :
         1. weights initialization.
         2. compute forward pass:
-            a. save the inputs while training
+            a. save the inputs while fiting
             b. compute the z.
             c. compute the activation.
             d. return the activation.
@@ -28,7 +28,7 @@ class Neuron(Module):
         super().__init__()
         self.input_size = input_size
         self.weights = np.random.randn(input_size, 1) * 0.01
-        self.bias = 0
+        self.bias = np.zeros((1, 1))
         self.activation = get_activation[activation.lower()]()
 
     def forward(self, x: np.ndarray) -> np.ndarray:
@@ -40,16 +40,16 @@ class Neuron(Module):
         a = self.activation.forward(z)      # (m, 1)
         return a
 
-    def backward(self, grad_output: np.ndarray) -> np.ndarray: # (m, 1)
+    def backward(self, grad_output: np.ndarray) -> tuple[float, float, float]: # (m, 1)
         da_dz = self.activation.backward(grad_output = grad_output) # (m, 1)
         dL_dz = da_dz # (m, 1)
-        dL_dw = self.cache.T @ dL_dz    # (n, 1) -> (n, m) @ (m, 1)
-        dL_db = np.sum(dL_dz, axis=0, keepdims=True)    # (1,) -> sum(m)
-        dL_dx = dL_dz @ self.weights.T  # (m, n) -> (m, 1) @ (1, n)
+        dL_dw:float = self.cache.T @ dL_dz    # (n, 1) -> (n, m) @ (m, 1)
+        dL_db:float = np.sum(dL_dz, axis=0, keepdims=True)    # (1,) -> sum(m)
+        dL_dx:float = dL_dz @ self.weights.T  # (m, n) -> (m, 1) @ (1, n)
 
         return dL_dw, dL_db, dL_dx
     
-    def train(self,x:np.ndarray, y: np.ndarray, loss_fn, lr: float = 1e-2, epochs: int=100) -> None:
+    def fit(self,x:np.ndarray, y: np.ndarray, loss_fn, lr: float = 1e-2, epochs: int=100) -> list:
         """Train the neuron using gradient descent."""
         history = []
         for epoch in range(epochs):
@@ -108,12 +108,12 @@ if __name__ == "__main__":
     my_neuron = Neuron(input_size=input_size, activation="sigmoid")
     loss_fn = BCE(from_logits=False)
 
-    # 3. Train Custom Neuron
-    print("--- Training Custom Neuron ---")
-    history = my_neuron.train(X, y, loss_fn, lr=0.1, epochs=2000)
+    # 3. fit Custom Neuron
+    print("--- fiting Custom Neuron ---")
+    history = my_neuron.fit(X, y, loss_fn, lr=0.1, epochs=2000)
 
-    # 4. Train Scikit-Learn Logistic Regression
-    print("\n--- Training Scikit-Learn ---")
+    # 4. fit Scikit-Learn Logistic Regression
+    print("\n--- fiting Scikit-Learn ---")
     sk_model = LogisticRegression(C=np.inf) # No regularization to match our simple neuron
     sk_model.fit(X, y.ravel())
 
