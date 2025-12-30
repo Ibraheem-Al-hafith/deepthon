@@ -56,7 +56,7 @@ class Layer(Module):
         """
         # 1. initialize the weights :
         self.weights: np.ndarray = initialize[str(activation) if activation in initialize.keys() else "relu"]((n_inputs, n_neurons)) # HE initialization as default, other wise based on the activation function
-        self.biases = np.zeros((1, n_neurons))
+        self.bias = np.zeros((1, n_neurons))
         # 2. initialize the activation function :
         self.activation = get_activation[activation or "linear"]() # get the activation function, default is linear (or no activation)
     
@@ -66,7 +66,7 @@ class Layer(Module):
         :type x: np.ndarray
         """
         # 1. pass the x through the model to get the linear transformation (z)
-        z:np.ndarray  = x @ self.weights + self.biases # (m,n) @ (n, nn) + (nn, 1) = (m, nn)
+        z:np.ndarray  = x @ self.weights + self.bias # (m,n) @ (n, nn) + (nn, 1) = (m, nn)
         # 2. pass the z through the non-linear part to get the activation (a)
         a:np.ndarray = self.activation(z)
         # 3. Handle cache saving the activation a for backward propagation in the case of training
@@ -104,7 +104,7 @@ def compare_with_pytorch():
     
     # 4. SYNC WEIGHTS: PyTorch stores weights as (out, in), yours is (in, out)
     pt_layer.weight.data = torch.from_numpy(my_layer.weights.T).float()
-    pt_layer.bias.data = torch.from_numpy(my_layer.biases).float()
+    pt_layer.bias.data = torch.from_numpy(my_layer.bias).float()
     
     # 5. Prepare Input Data
     x_np = np.random.randn(n_samples, n_inputs).astype(np.float32)

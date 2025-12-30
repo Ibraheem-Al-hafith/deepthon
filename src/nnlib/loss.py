@@ -1,14 +1,15 @@
 """Loss functions for our library"""
 import numpy as np
 from activations import Sigmoid
+from typing import Any
 class LOSS:
-    def __call__(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.float64:
+    def __call__(self, y_true: np.ndarray, y_pred: np.ndarray):
         return self.forward(y_true, y_pred)
     """Base class for the loss functions"""
-    def forward(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.float64:
+    def forward(self, y_true: np.ndarray, y_pred: np.ndarray):
         """Calculate the loss function"""
         raise NotImplementedError
-    def backward(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.float64:
+    def backward(self, y_true: np.ndarray, y_pred: np.ndarray):
         """Calculate the Gradients"""
         raise NotImplementedError
 
@@ -17,10 +18,10 @@ class MSE(LOSS):
     Calculate mean squared error.
     mse(y, y_hat) = sum((y - y_hat)^2/n)
     """
-    def forward(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.float64:
+    def forward(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.floating[Any]:
         """Calculate the MSE loss"""
         return np.mean((y_true - y_pred) ** 2)
-    def backward(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.float64:
+    def backward(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray[Any]:
         """Calculate the gradient of MSE loss"""
         m = y_true.size
         return (2/m) * (y_pred - y_true)
@@ -33,14 +34,14 @@ class BCE(LOSS):
     def __init__(self, from_logits: bool = True) -> None:
         self.from_logits = from_logits
 
-    def forward(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.float64:
+    def forward(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.floating[Any] :
         """Calculate the BCE loss"""
         epsilon = 1e-15
         if self.from_logits:
             y_pred = Sigmoid().forward(y_pred)
         y_pred = np.clip(y_pred, epsilon, 1 - epsilon)
         return -np.mean(y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred))
-    def backward(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.float64:
+    def backward(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
         """Calculate the gradient of BCE loss"""
         epsilon = 1e-15
         y_pred = np.clip(y_pred, epsilon, 1 - epsilon)
