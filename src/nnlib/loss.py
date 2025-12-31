@@ -34,18 +34,29 @@ class BCE(LOSS):
     def __init__(self, from_logits: bool = True) -> None:
         self.from_logits = from_logits
 
-    def forward(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.floating[Any] :
-        """Calculate the BCE loss"""
-        epsilon = 1e-15
+    def forward(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.floating[Any]:
         if self.from_logits:
-            y_pred = Sigmoid().forward(y_pred)
-        y_pred = np.clip(y_pred, epsilon, 1 - epsilon)
+            # y_pred are raw logits (x)
+            # Stable formula: max(x, 0) - x * y + log(1 + exp(-abs(x)))
+            loss = np.maximum(y_pred, 0) - y_pred * y_true + np.log(1 + np.exp(-np.abs(y_pred)))
+            return np.mean(loss)
+    
+        # If already probabilities, use clip logic with a larger epsilon
+        epsilon = 1e-7 
+        y_pred = np.clip(y_pred, epsilon, 1.0 - epsilon)
         return -np.mean(y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred))
     def backward(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
-        """Calculate the gradient of BCE loss"""
-        epsilon = 1e-15
-        y_pred = np.clip(y_pred, epsilon, 1 - epsilon)
-        m = y_true.size
+        m = y_true.shape[0]
+        
+        if self.from_logits:
+            # The gradient of BCE(Sigmoid(x)) is simply (Sigmoid(x) - y_true)
+            # We still need the sigmoid values for this calculation
+            sig = 1 / (1 + np.exp(-np.clip(y_pred, -500, 500)))
+            return (sig - y_true) / m
+        
+        # Non-logits version (less stable)
+        epsilon = 1e-7
+        y_pred = np.clip(y_pred, epsilon, 1.0 - epsilon)
         return ((y_pred - y_true) / (y_pred * (1 - y_pred))) / m
 
 class CrossEntropy(LOSS):

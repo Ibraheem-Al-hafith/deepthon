@@ -32,6 +32,8 @@ class Dropout(Module):
         output:np.ndarray = (mask * x) / keep_prob
 
         return output
+    def backward(self, x: np.ndarray) -> np.ndarray:
+        return x
 
 
 def test_dropout():

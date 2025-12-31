@@ -1,9 +1,16 @@
 """Initialization for the nn weights"""
 from activations import *
 import numpy as np
-from typing import Literal, Tuple
+from typing import Literal, Tuple, List
 from base import Module
+from optimization import Dropout
+from loss import BCE
+from sklearn.datasets import make_circles
 
+
+# =====================================================================
+#************************   UTILITIES   *******************************
+# =====================================================================
 def HE(shape: Tuple[int, int]) -> np.ndarray:
     """HE initialization for ReLU and startups"""
     n_in, _ = shape[0], shape[1]
@@ -39,12 +46,17 @@ get_activation = {
 }
 
 
+# =====================================================================
+#************************   Layer   *******************************
+# =====================================================================
+
 class Layer(Module):
     """
     Dense Layer
     """
     def __init__(
-            self, n_inputs: int, n_neurons: int, activation: Literal["relu", "sigmoid", "tanh", "linear"] | None = None,
+            self, n_inputs: int, n_neurons: int,
+            activation: Literal["relu", "sigmoid", "tanh", "linear"] | Activation | None = None,
             ) -> None:
         """
         :param n_inputs: number of the input features
@@ -52,13 +64,20 @@ class Layer(Module):
         :param n_neurons: number of the layer neurons
         :type n_neurons: int
         :param activation: activation function for the Layer
-        :type activation: Literal["relu", "sigmoid", "tanh", "linear"] | None
+        :type activation: Literal["relu", "sigmoid", "tanh", "linear"] | None | Activation (must have forward and backward methods)
         """
+        super().__init__()
         # 1. initialize the weights :
-        self.weights: np.ndarray = initialize[str(activation) if activation in initialize.keys() else "relu"]((n_inputs, n_neurons)) # HE initialization as default, other wise based on the activation function
+        self.weights: np.ndarray = initialize[
+            str(activation) if activation in initialize.keys()
+            else "sigmoid" if n_neurons == 1
+            else "relu"
+            ]((n_inputs, n_neurons)) # HE initialization as default, Xavier if one neuron, other wise based on the activation function
         self.bias = np.zeros((1, n_neurons))
         # 2. initialize the activation function :
-        self.activation = get_activation[activation or "linear"]() # get the activation function, default is linear (or no activation)
+        self.activation = get_activation[activation or "linear"]() if not isinstance(activation, Activation) else activation# get the activation function, default is linear (or no activation)
+        self.dw = None
+        self.db = None
     
     def forward(self, x: np.ndarray) -> np.ndarray:
         """
@@ -75,17 +94,94 @@ class Layer(Module):
         # 4. return the activations
         return a #(m, nn)
     
-    def backward(self, grad_output: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def backward(self, grad_output: np.ndarray) -> np.ndarray:
         # 1. get the dL_dz from the activation backward
         dL_dz: np.ndarray = self.activation.backward(grad_output) # (m, nn)
         # 2. get the dw, db and dx from dz using chain rule
-        dL_dw:np.ndarray = self.x.T @ dL_dz    #(n, m) @ (m, nn) = (n, nn)
-        dL_db:np.ndarray = np.sum(dL_dz,axis=0,keepdims = True) # (m, nn) -> (1, nn)
+        self.dw = self.x.T @ dL_dz    #(n, m) @ (m, nn) = (n, nn)
+        self.db = np.sum(dL_dz,axis=0,keepdims = True) # (m, nn) -> (1, nn)
         dL_dx:np.ndarray = dL_dz @ self.weights.T # (m, nn) @ (nn, n) -> (m, n)
 
-        return dL_dw, dL_db, dL_dx
+        return dL_dx
+    def get_parameters(self): 
+        return [
+            {"param": self.weights, "grad": self.dw, "name": "weight"},
+            {"param": self.bias, "grad": self.db, "name": "bias"} 
+        ]
 
 
+# =====================================================================
+#************************   MLP   *******************************
+# =====================================================================
+
+class Sequential(Module):
+    """
+    Multi Layer Perceptron
+    """
+    def __init__(self, layers: List[Layer | Dropout | Activation], optimizer):
+        super().__init__()
+        self.layers = layers
+        self.optimizer = optimizer
+    def __call__(self, *args: Any, **kwds: Any) -> Any:
+        return self.forward(*args, **kwds)
+    def train(self):
+        self.training = True
+        for layer in self.layers:
+            layer.train()
+    def eval(self):
+        self.training = False
+        for layer in self.layers:
+            layer.eval()
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer.forward(x)
+        return x
+    def backward(self, grad):
+        for layer in reversed(self.layers):
+            grad = layer.backward(grad)
+        return grad
+
+    def update(self):
+        self.optimizer.step(self.layers)
+    def add(self, layers: Layer | Dropout | Activation | List[Layer | Dropout | Activation]):
+        if isinstance(layers, list):
+            for layer in layers:
+                self.add(layer)
+        else:
+            self.layers.append(layers)
+
+
+class SGD:
+    def __init__(self, lr=0.01, l1=0.0, l2=0.0):
+        self.lr = lr
+        self.l1 = l1
+        self.l2 = l2
+
+    def step(self, layers):
+        for layer in layers:
+            # Match the method name exactly
+            if not hasattr(layer, 'get_parameters'):
+                continue
+            
+            for entry in layer.get_parameters():
+                param = entry["param"]
+                grad = entry["grad"]
+                
+                if grad is None:
+                    continue
+                
+                # 1. Start with the data gradient
+                total_grad = grad.copy()
+                
+                # 2. Add Regularization (usually only to weights, not bias)
+                if entry["name"] == "weight":
+                    if self.l2 > 0:
+                        total_grad += self.l2 * param
+                    if self.l1 > 0:
+                        total_grad += self.l1 * np.sign(param)
+                
+                # 3. Update in-place
+                param -= self.lr * total_grad
 
 def compare_with_pytorch():
     # 1. Setup dimensions
@@ -141,6 +237,73 @@ def compare_with_pytorch():
     dx_diff = np.abs(dL_dx_my - x_pt.grad.numpy()).max() # type: ignore
     print(f"Input Grad Difference:  {dx_diff:.2e}")
 
+def train_model(epochs=1000, lr=0.3, n_samples=1000):
+    # Generate dataset
+    X, y = make_circles(n_samples=n_samples, noise=0.1, random_state=42)
+    y = y.reshape(-1, 1).astype(np.float32)
+    
+    optimizer = SGD(lr = lr, l1 = 0, l2=0.001)
+    # Create model
+    model = Sequential([], optimizer=optimizer)
+    model.add([
+        Layer(2, 64, activation="relu"),
+        Dropout(0.1),
+    ])
+    model.add(Layer(64, 1, "sigmoid"))
+    
+    # Loss and optimizer
+    loss_fn = BCE(from_logits=False)
+    
+    # Training loop
+    for epoch in range(epochs):
+        model.train()
+        
+        # Forward pass
+        output = model(X)
+        if np.any(np.isnan(output)):
+            print("NaN in output")
+            break
+        loss = loss_fn(output, y)
+        
+        # Backward pass
+        grad = loss_fn.backward(y, output)
+        model.backward(grad)
+        
+        # Update weights
+        model.update()
+        
+        if epoch % 100 == 0:
+            print(f"Epoch {epoch}, Loss: {loss:.4f}")
+    
+    # Evaluate
+    model.eval()
+    with np.testing.suppress_warnings() as sup:
+        sup.filter(RuntimeWarning)
+        predictions = (model(X) > 0.5).astype(int)
+    accuracy = np.mean(predictions == y)
+    print(f"Final Accuracy: {accuracy:.4f}")
+    
+    return model
+
+def test_layer():
+    from sklearn.datasets import make_circles
+    X, y = make_circles(5)
+    model = Sequential(
+        [Layer(2, 32),
+        ReLU(),
+        Layer(32, 32,"relu"),
+        Dropout(0.1),
+        Layer(32, 1, "sigmoid")], optimizer=SGD()
+    )
+    model.eval()
+    output = model(X)
+    #grad = model.backward(np.array([0.8]))
+    print(
+        f"output : {output}",
+    )
+
 if __name__ == "__main__":
     # Run the comparison
-    compare_with_pytorch()
+    # compare_with_pytorch()
+    # test_layer()
+    train_model(1000,0.3)
