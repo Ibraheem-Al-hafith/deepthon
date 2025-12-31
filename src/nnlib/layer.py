@@ -6,6 +6,7 @@ from base import Module
 from optimization import Dropout
 from loss import BCE
 from sklearn.datasets import make_circles
+from optimizers import SGD
 
 
 # =====================================================================
@@ -150,38 +151,6 @@ class Sequential(Module):
         else:
             self.layers.append(layers)
 
-
-class SGD:
-    def __init__(self, lr=0.01, l1=0.0, l2=0.0):
-        self.lr = lr
-        self.l1 = l1
-        self.l2 = l2
-
-    def step(self, layers):
-        for layer in layers:
-            # Match the method name exactly
-            if not hasattr(layer, 'get_parameters'):
-                continue
-            
-            for entry in layer.get_parameters():
-                param = entry["param"]
-                grad = entry["grad"]
-                
-                if grad is None:
-                    continue
-                
-                # 1. Start with the data gradient
-                total_grad = grad.copy()
-                
-                # 2. Add Regularization (usually only to weights, not bias)
-                if entry["name"] == "weight":
-                    if self.l2 > 0:
-                        total_grad += self.l2 * param
-                    if self.l1 > 0:
-                        total_grad += self.l1 * np.sign(param)
-                
-                # 3. Update in-place
-                param -= self.lr * total_grad
 
 def compare_with_pytorch():
     # 1. Setup dimensions
