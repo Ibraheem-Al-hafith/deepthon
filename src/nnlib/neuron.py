@@ -1,9 +1,9 @@
 """Single Neuron implementation."""
 
 import numpy as np
-from activations import *
-from base import Module
-from loss import BCE
+from .activations import *
+from .base import Module
+from .loss import BCE
 
 get_activation = {
     "relu": lambda: ReLU(),

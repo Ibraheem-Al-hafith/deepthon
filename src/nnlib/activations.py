@@ -4,12 +4,14 @@ includes ReLU, Sigmoid, Tanh, and Linear.
 """
 
 import numpy as np
-from base import Module
+from .base import Module
 from typing import Any
 
 
 class Activation(Module):
     """Base class for activation functions"""
+    def __init__(self):
+        super().__init__()
     def __call__(self, x: np.ndarray) -> np.ndarray:
         return self.forward(x)
     def _formula(self, x: np.ndarray):
@@ -29,6 +31,8 @@ class ReLU(Activation):
     """Rectified Linear Unit activation function
     f(x) = max(0, x)
     """
+    def __init__(self):
+        super().__init__()
     def _formula(self, x):
         return np.maximum(0, x)
     def _gradient(self, x):
@@ -38,6 +42,8 @@ class Sigmoid(Activation):
     """Sigmoid activation function
     f(x) = 1 / (1 + exp(-x))
     """
+    def __init__(self):
+        super().__init__()
     def _formula(self, x):
         x = np.clip(x, -500, 500)
         return 1 / (1 + np.exp(-x))
@@ -49,6 +55,8 @@ class Softmax(Activation):
     Softmax activation function
     f(x) = exp(x) / sum(exp(x))
     """
+    def __init__(self):
+        super().__init__()
     def forward(self, x):
         x = self._formula(x)
         if self.training:
@@ -78,6 +86,8 @@ class Tanh(Activation):
     """Hyperbolic Tangent activation function
     f(x) = tanh(x)
     """
+    def __init__(self):
+        super().__init__()
     def _formula(self, x):
         return np.tanh(x)
     def _gradient(self, x):
@@ -87,6 +97,8 @@ class Linear(Activation):
     """Linear activation function
     f(x) = x
     """
+    def __init__(self):
+        super().__init__()
     def _formula(self, x):
         return x
     def _gradient(self, x):
@@ -103,28 +115,28 @@ def testing():
     )
     x = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
     relu = ReLU()
-    print("ReLU Forward:", relu.forward(x))
+    print("ReLU Forward:", relu(x))
     print("ReLU Torch Forward:", TorchReLU()(torch.from_numpy(x)))
     # relu.training = True
     relu.backward(np.ones_like(x))
     print("ReLU Backward:", relu.backward(np.ones_like(x)))
     
     sigmoid = Sigmoid()
-    print("\nSigmoid Forward:", sigmoid.forward(x))
+    print("\nSigmoid Forward:", sigmoid(x))
     print("Sigmoid Torch Forward:", TorchSigmoid()(torch.from_numpy(x)))
     # sigmoid.training = True
     sigmoid.backward(np.ones_like(x))
     print("Sigmoid Backward:", sigmoid.backward(np.ones_like(x)))
     
     tanh = Tanh()
-    print("\nTanh Forward:", tanh.forward(x))
+    print("\nTanh Forward:", tanh(x))
     print("Tanh Torch Forward:", TorchTanh()(torch.from_numpy(x)))
     # tanh.training = True
     tanh.backward(np.ones_like(x))
     print("Tanh Backward:", tanh.backward(np.ones_like(x)))
     
     linear = Linear()
-    print("\nLinear Forward:", linear.forward(x))
+    print("\nLinear Forward:", linear(x))
     print("Linear Torch Forward:", TorchLinear()(torch.from_numpy(x)))
     #linear.training = True
     linear.backward(np.ones_like(x))

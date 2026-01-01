@@ -1,7 +1,5 @@
 import numpy as np
-from layer import Layer, Sequential, Dropout
-from loss import BCE
-from schedulers import *
+from .schedulers import *
 """
 ### Phase 1: The BaseOptimizer (Parent) 🏛️
 This class manages the "administrative" tasks.
@@ -71,7 +69,10 @@ class Optimizer:
                 update = self._compute_update(total_grad, self.state[key], current_lr)
                 
                 # 4. Apply the update
-                param -= update
+                if hasattr(self, "weight_decay"):
+                    param[:] -= update + (current_lr * self.__getattribute__("weight_decay") * param)
+                else:
+                    param[:] -= update
     def _compute_update(self, *args, **kwrds):
         raise NotImplementedError
 
@@ -124,8 +125,8 @@ class Adam(Optimizer):
 
     def _compute_update(self, grad, state, current_lr):
         # 1. Update first and second moments
-        state["m"] = self.beta1 * state["m"] + (1 - self.beta1) * grad
-        state["v"] = self.beta2 * state["v"] + (1 - self.beta2) * np.square(grad)
+        state["m"][:] = self.beta1 * state["m"] + (1 - self.beta1) * grad
+        state["v"][:] = self.beta2 * state["v"] + (1 - self.beta2) * np.square(grad)
 
         # 2. Bias correction
         m_hat = state["m"] / (1 - self.beta1 ** self.iterations)
@@ -141,59 +142,16 @@ class Adam(Optimizer):
             "v": np.zeros_like(param)
         }
 
-def train_model(optimizer,epochs=3000, n_samples=1000):
-    # Generate dataset
-    from sklearn.datasets import make_circles
-    X, y = make_circles(n_samples=n_samples, noise=0.1, random_state=42)
-    y = y.reshape(-1, 1).astype(np.float32)
-    
-    # Create model
-    model = Sequential([], optimizer=optimizer)
-    model.add([
-        Layer(2, 64, activation="relu"),
-        Dropout(0.2),
-    ])
-    model.add(Layer(64, 1))
-    
-    # Loss and optimizer
-    loss_fn = BCE(from_logits=True)
-    
-    # Training loop
-    for epoch in range(epochs):
-        model.train()
-        
-        # Forward pass
-        output = model(X)
-        if np.any(np.isnan(output)):
-            print("NaN in output")
-            break
-        loss = loss_fn(output, y)
-        
-        # Backward pass
-        grad = loss_fn.backward(y, output)
-        model.backward(grad)
-        
-        # Update weights
-        model.update()
-        
-        if epoch % 100 == 0:
-            print(f"Epoch {epoch}, Loss: {loss:.4f}")
-    
-    # Evaluate
-    model.eval()
-    with np.testing.suppress_warnings() as sup:
-        sup.filter(RuntimeWarning)
-        predictions = (model(X) > 0.5).astype(int)
-    accuracy = np.mean(predictions == y)
-    print(f"Final Accuracy: {accuracy:.4f}")
-    
-    return model
-
-if __name__=="__main__":
-    sch = CosineScheduler(1e-7, 3000)
-    print("SGD\n")
-    train_model(SGD(lr = 0.3, beta=0.99, scheduler=sch))
-    print("RMSProb\n")
-    train_model(RMSProp(lr = 0.3, rho=0.9, scheduler=sch))
-    print("Adam\n")
-    train_model(Adam(lr = 0.3, scheduler=sch))
+class AdamW(Adam):
+    def __init__(self, lr=0.001, beta1=0.9, beta2=0.999, epsilon=1e-7, l1=0.0, l2=0.01, scheduler=None, weigh_decay = 0.01):
+        # We call the Adam init but explicitly pass weight_decay=True
+        super().__init__(
+            lr=lr, 
+            beta1=beta1, 
+            beta2=beta2, 
+            epsilon=epsilon, 
+            l1=l1, 
+            l2=l2, 
+            scheduler=scheduler
+        )
+        self.weight_decay = weigh_decay

@@ -1,12 +1,8 @@
 """Initialization for the nn weights"""
-from activations import *
+from .activations import *
 import numpy as np
 from typing import Literal, Tuple, List
-from base import Module
-from optimization import Dropout
-from loss import BCE
-from sklearn.datasets import make_circles
-from optimizers import SGD
+from .base import Module
 
 
 # =====================================================================
@@ -111,6 +107,46 @@ class Layer(Module):
         ]
 
 
+# =============================================================================
+# *************************** DROP OUT ****************************************
+# =============================================================================
+
+class Dropout(Module):
+    """
+    Dropout is regularization method wich randomly drops a number of neurons to reduce overfitting
+    """
+    def __init__(self, p: float = 0.2) -> None:
+        """
+        Docstring for __init__
+        
+        :param p: dropout probability
+        :type p: float
+        """
+        super().__init__()
+        assert 0 <= p <= 1, "Drop probability should be between 0 and 1"
+        self.drop_prob = p
+        self.keep_prob = 1 - self.drop_prob
+    
+    def forward(self, x: np.ndarray) -> np.ndarray:
+        # If model mode is not training, return the original data
+        if not self.training:
+            return x
+        # else, randomly drop a portion from the data
+        # 1. calculate the mask
+        mask: np.ndarray = (np.random.rand(*x.shape) < self.keep_prob).astype(np.float32)
+        # 2. calculate the output and scale the output to serve the signal strength
+        output:np.ndarray = (mask * x) / self.keep_prob
+        # 3. store the mask for backward
+        self.mask = mask
+
+        return output
+    def backward(self, x: np.ndarray) -> np.ndarray:
+        if self.training:
+            return x * self.mask / self.keep_prob
+        else:
+            return x
+
+
 # =====================================================================
 #************************   MLP   *******************************
 # =====================================================================
@@ -119,10 +155,9 @@ class Sequential(Module):
     """
     Multi Layer Perceptron
     """
-    def __init__(self, layers: List[Layer | Dropout | Activation], optimizer):
+    def __init__(self, layers: List[Module]):
         super().__init__()
         self.layers = layers
-        self.optimizer = optimizer
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         return self.forward(*args, **kwds)
     def train(self):
@@ -141,16 +176,117 @@ class Sequential(Module):
         for layer in reversed(self.layers):
             grad = layer.backward(grad)
         return grad
-
-    def update(self):
-        self.optimizer.step(self.layers)
-    def add(self, layers: Layer | Dropout | Activation | List[Layer | Dropout | Activation]):
+    def add(self, layers: Module| List[Module]):
         if isinstance(layers, list):
             for layer in layers:
                 self.add(layer)
         else:
             self.layers.append(layers)
 
+import numpy as np
+
+class BatchNorm(Module):
+    def __init__(self, num_features, momentum=0.9, epsilon=1e-5):
+        super().__init__()
+        self.gamma = np.ones((1, num_features))
+        self.beta = np.zeros((1, num_features))
+        self.momentum = momentum
+        self.epsilon = epsilon
+        
+        # Parameters for inference (Running averages)
+        self.running_mean = np.zeros((1, num_features))
+        self.running_var = np.ones((1, num_features))
+        
+        # Gradients
+        self.dgamma = None
+        self.dbeta = None
+        
+        # Mode
+        self.training = True
+
+    def forward(self, X):
+        if self.training:
+            # 1. Calculate Batch Statistics
+            batch_mean = np.mean(X, axis=0, keepdims=True)
+            batch_var = np.var(X, axis=0, keepdims=True)
+            
+            # 2. Update Running Statistics for Inference
+            self.running_mean = self.momentum * self.running_mean + (1 - self.momentum) * batch_mean
+            self.running_var = self.momentum * self.running_var + (1 - self.momentum) * batch_var
+            
+            # 3. Normalize
+            self.X_centered = X - batch_mean
+            self.std_inv = 1.0 / np.sqrt(batch_var + self.epsilon)
+            self.X_hat = self.X_centered * self.std_inv
+        else:
+            # Use Running Stats during Evaluation
+            X_centered = X - self.running_mean
+            std_inv = 1.0 / np.sqrt(self.running_var + self.epsilon)
+            self.X_hat = X_centered * std_inv
+
+        # 4. Scale and Shift
+        return self.gamma * self.X_hat + self.beta
+
+    def backward(self, dout):
+        batch_size = dout.shape[0]
+        
+        # Gradient w.r.t. gamma and beta
+        self.dgamma = np.sum(dout * self.X_hat, axis=0, keepdims=True)
+        self.dbeta = np.sum(dout, axis=0, keepdims=True)
+        
+        # Gradient w.r.t. input (X) - Simplified chain rule version
+        dx_hat = dout * self.gamma
+        da = (1.0 / batch_size) * self.std_inv * (
+            batch_size * dx_hat - np.sum(dx_hat, axis=0, keepdims=True) -
+            self.X_hat * np.sum(dx_hat * self.X_hat, axis=0, keepdims=True)
+        )
+        return da
+
+    def get_parameters(self):
+        return [
+            {"param": self.gamma, "grad": self.dgamma, "name": "gamma"},
+            {"param": self.beta, "grad": self.dbeta, "name": "beta"}
+        ]
+
+
+
+def test_dropout():
+    import torch
+    import numpy as np
+    import random
+    import os
+
+    def set_seed(seed: int = 42) -> None:
+
+        """Sets the seed for generating random numbers in PyTorch, NumPy, and Python."""
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        # Set seed for all available GPUs
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
+            # For deterministic behavior on CuDNN backend
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+
+        # Set a fixed value for the hash seed
+        os.environ["PYTHONHASHSEED"] = str(seed)
+        print(f"Random seed set as {seed}")
+
+    set_seed()
+    from torch.nn import Dropout as t_Dropout
+    X = np.random.randn(500, 1)
+    p = 0.2
+    my_dropout = Dropout(p = p)
+    torch_dropout = t_Dropout(p = p)
+    my_dropout.train()
+    my_output = my_dropout.forward(X)
+    torch_dropout.train()
+    torch_output = torch_dropout(torch.from_numpy(X))
+    print(f"My dropout result   : {my_output.T}")
+    print(f"Torch dropout result: {torch_output.numpy().T}")
+    print(f"Matches: {np.allclose(my_output, torch_output)}")
 
 def compare_with_pytorch():
     # 1. Setup dimensions
@@ -205,74 +341,7 @@ def compare_with_pytorch():
     # Compare Input Gradients
     dx_diff = np.abs(dL_dx_my - x_pt.grad.numpy()).max() # type: ignore
     print(f"Input Grad Difference:  {dx_diff:.2e}")
-
-def train_model(epochs=1000, lr=0.3, n_samples=1000):
-    # Generate dataset
-    X, y = make_circles(n_samples=n_samples, noise=0.1, random_state=42)
-    y = y.reshape(-1, 1).astype(np.float32)
-    
-    optimizer = SGD(lr = lr, l1 = 0, l2=0.001)
-    # Create model
-    model = Sequential([], optimizer=optimizer)
-    model.add([
-        Layer(2, 64, activation="relu"),
-        Dropout(0.1),
-    ])
-    model.add(Layer(64, 1, "sigmoid"))
-    
-    # Loss and optimizer
-    loss_fn = BCE(from_logits=False)
-    
-    # Training loop
-    for epoch in range(epochs):
-        model.train()
-        
-        # Forward pass
-        output = model(X)
-        if np.any(np.isnan(output)):
-            print("NaN in output")
-            break
-        loss = loss_fn(output, y)
-        
-        # Backward pass
-        grad = loss_fn.backward(y, output)
-        model.backward(grad)
-        
-        # Update weights
-        model.update()
-        
-        if epoch % 100 == 0:
-            print(f"Epoch {epoch}, Loss: {loss:.4f}")
-    
-    # Evaluate
-    model.eval()
-    with np.testing.suppress_warnings() as sup:
-        sup.filter(RuntimeWarning)
-        predictions = (model(X) > 0.5).astype(int)
-    accuracy = np.mean(predictions == y)
-    print(f"Final Accuracy: {accuracy:.4f}")
-    
-    return model
-
-def test_layer():
-    from sklearn.datasets import make_circles
-    X, y = make_circles(5)
-    model = Sequential(
-        [Layer(2, 32),
-        ReLU(),
-        Layer(32, 32,"relu"),
-        Dropout(0.1),
-        Layer(32, 1, "sigmoid")], optimizer=SGD()
-    )
-    model.eval()
-    output = model(X)
-    #grad = model.backward(np.array([0.8]))
-    print(
-        f"output : {output}",
-    )
-
 if __name__ == "__main__":
     # Run the comparison
-    # compare_with_pytorch()
-    # test_layer()
-    train_model(1000,0.3)
+    compare_with_pytorch()
+    test_dropout()

@@ -1,7 +1,7 @@
 """The base class for neural network components.
 It's meant to handle the training and evaluation modes.
 """
-
+from typing import Any
 class Module:
     """Base class for all neural network modules.
     
@@ -18,3 +18,7 @@ class Module:
     def eval(self):
         """Sets the module to evaluation mode."""
         self.training = False
+    def forward(self, *args, **kwrds) -> Any:
+        return NotImplementedError
+    def backward(self, *args, **kwrds) -> Any:
+        return NotImplementedError

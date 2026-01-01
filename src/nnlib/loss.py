@@ -1,6 +1,6 @@
 """Loss functions for our library"""
 import numpy as np
-from activations import Sigmoid
+from .activations import Sigmoid
 from typing import Any
 class LOSS:
     def __call__(self, y_true: np.ndarray, y_pred: np.ndarray):
@@ -57,7 +57,7 @@ class BCE(LOSS):
         # Non-logits version (less stable)
         epsilon = 1e-7
         y_pred = np.clip(y_pred, epsilon, 1.0 - epsilon)
-        return ((y_pred - y_true) / (y_pred * (1 - y_pred))) / m
+        return (1 / m) * ((y_pred - y_true) / (y_pred * (1 - y_pred)))
 
 class CrossEntropy(LOSS):
     """

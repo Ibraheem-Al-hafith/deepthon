@@ -45,6 +45,6 @@ class CosineScheduler(BaseScheduler):
         self.eta_min = eta_min
         self.max_iterations = max_iterations
     def get_lr(self, initial_lr, iteration):
-        fraction = iteration / self.max_iterations
+        fraction = min(iteration / self.max_iterations, 1.0)
         lr = self.eta_min + (initial_lr - self.eta_min) * (1 + np.cos((np.pi * fraction))) / 2
         return lr
