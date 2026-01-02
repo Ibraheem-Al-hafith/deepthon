@@ -26,7 +26,7 @@ class BaseMetric:
         return NotImplementedError
     def _prepare(self, y_true: np.ndarray, y_pred: np.ndarray):
         # 1. lets check if the target is binary
-        binary = (y_true.shape[1] == 1) and (np.unique(y_true.size) <= 2)
+        binary = (y_true.shape[1] == 1)# and (np.unique(y_true.size) <= 2)
         # if its, lets check if y_pred is logits or probabilities
         if binary:
             # p is the probabilities
