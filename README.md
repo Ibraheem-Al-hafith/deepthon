@@ -42,7 +42,7 @@ from deepthon.nn.activations import ReLU, Sigmoid
 from deepthon.nn.losses import BCE
 from deepthon.nn.optimizers import Adam
 from deepthon.pipeline import Trainer
-from deepthon.utils.metrics import accuracy
+from deepthon.utils.metrics import Accuracy
 
 X = np.random.randn(500, 2)
 y = (X[:, 0] * X[:, 1] > 0).astype(int).reshape(-1, 1)
@@ -59,11 +59,12 @@ loss = BCE()
 trainer = Trainer(
     model=model,
     optimizer=optimizer,
-    loss_fn=loss,
-    metrics={"accuracy": accuracy},
+    loss_func=loss,
+    batch_size=32,
+    metric_fn={"accuracy": Accuracy()},
 )
 
-trainer.fit(X, y, epochs=20, batch_size=32)
+trainer.train(X, y, epochs=20)
 ```
 
 More examples are available in `examples/`.
@@ -117,6 +118,6 @@ MIT License — see `LICENSE` for details.
 
 ## Links
 
-* Repository: [https://github.com/Ibraheem-Al-hafith/deepthon](https://github.com/Ibraheem-Al-hafith/deepthon)
-* Issues: [https://github.com/Ibraheem-Al-hafith/deepthon/issues](https://github.com/Ibraheem-Al-hafith/deepthon/issues)
+* Repository: [deepthon](https://github.com/Ibraheem-Al-hafith/deepthon)
+* Issues: [issues](https://github.com/Ibraheem-Al-hafith/deepthon/issues)
 

@@ -67,7 +67,7 @@ class Trainer:
         patience: int = 5, 
         min_delta: float = 1e-4,
         val_batch_size: Optional[int] = None, 
-        metric_fc: MetricLiteral = None,
+        metric_fn: MetricLiteral = None,
         logging: Literal["steps", "epoch"] = "epoch", 
         logging_steps: Union[int, float] = 0.1, 
         eval_steps: int = 1
@@ -83,7 +83,7 @@ class Trainer:
         self.min_delta: float = min_delta
         self.batch_size: int = batch_size
         self.val_batch_size: int = val_batch_size or batch_size
-        self.metric_fn: MetricLiteral = metric_fc
+        self.metric_fn: MetricLiteral = metric_fn
         self.logging: str = logging
         self.logging_steps: Union[int, float] = logging_steps
         self.eval_steps: int = eval_steps
