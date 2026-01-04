@@ -1,6 +1,3 @@
-
-
-
 from sklearn.datasets import make_circles, make_moons, load_breast_cancer
 from sklearn.model_selection import train_test_split
 from src.nnlib import Sequential, Layer, Dropout, BatchNorm
