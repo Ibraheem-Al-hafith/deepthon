@@ -1,11 +1,9 @@
-from sklearn.datasets import make_circles, make_moons, load_breast_cancer
-from sklearn.model_selection import train_test_split
-from src.nnlib import Sequential, Layer, Dropout, BatchNorm
-from src.nnlib.optimizers import Adam, SGD, AdamW
-from src.nnlib.schedulers import CosineScheduler, ExponentialDecay, StepDecay
-from src.nnlib.losses import BCE
-from src.pipeline import Trainer
-from src.utils.metrics import *
+from .deepthon.nn import Sequential, Layer, Dropout, BatchNorm
+from deepthon.nn.optimizers import Adam
+from deepthon.nn.losses import BCE
+from deepthon.pipeline import Trainer
+from deepthon.utils.metrics import accuracy
+
 import numpy as np
 
 def test_trainer():

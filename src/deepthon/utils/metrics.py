@@ -21,7 +21,7 @@ Classes:
 
 from typing import Any, Tuple, List, Union, Literal
 import numpy as np
-from ..nnlib.activations import Sigmoid, Softmax
+from ..nn.activations import Sigmoid, Softmax
 
 # Type alias for floating point NumPy arrays
 NDArray = np.ndarray[tuple[Any, ...], np.dtype[np.floating]]
