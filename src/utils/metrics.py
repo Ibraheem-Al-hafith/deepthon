@@ -1,98 +1,204 @@
+
+"""
+Performance Metrics for Model Evaluation.
+
+This module provides metrics for both Classification (Accuracy, Precision, etc.)
+and Regression (MSE, RMSE, R-Squared). It includes a robust preprocessing 
+base to handle logits, probabilities, and continuous values.
+
+Classes:
+    BaseMetric: Abstract base handling data preparation.
+    Classification:
+        Accuracy: Calculates the ratio of correct predictions.
+        Precision: Measures the quality of positive predictions per class.
+        Recall: Measures the ability to find all positive instances per class.
+        FBetaScore: Computes the harmonic mean of precision and recall.
+    Regression:
+        MSE: Mean Squared Error for regression.
+        RMSE: Root Mean Squared Error for regression.
+        RSquared: Coefficient of Determination for regression.
+"""
+
+from typing import Any, Tuple, List, Union, Literal
 import numpy as np
-from typing import Any
 from ..nnlib.activations import Sigmoid, Softmax
 
-class softmax(Softmax):
-    def __init__(self):
-        super().__init__()
-        self.traininng = False
-    def __call__(self, x: np.ndarray[tuple[Any, ...], np.dtype[Any]]) -> np.ndarray[tuple[Any, ...], np.dtype[Any]]:
-        return super().__call__(x)
+# Type alias for floating point NumPy arrays
+NDArray = np.ndarray[tuple[Any, ...], np.dtype[np.floating]]
 
-class sigmoid(Sigmoid):
-    def __init__(self):
-        super().__init__()
-        self.traininng = False
-    def __call__(self, x: np.ndarray[tuple[Any, ...], np.dtype[Any]]) -> np.ndarray[tuple[Any, ...], np.dtype[Any]]:
-        return super().__call__(x)
+# =============================================================================
+# BASE METRIC INTERFACE
+# =============================================================================
 
 class BaseMetric:
-    def __init__(self):
-        pass
-    def __call__(self, y_true:np.ndarray,y_pred:np.ndarray):
-        true_y, preds = self._prepare(y_true, y_pred)
-        return self._formula(true_y,preds)
-    def _formula(self, y_true:np.ndarray,y_pred:np.ndarray) -> Any:
-        return NotImplementedError
-    def _prepare(self, y_true: np.ndarray, y_pred: np.ndarray):
-        # 1. lets check if the target is binary
-        binary = (y_true.shape[1] == 1)# and (np.unique(y_true.size) <= 2)
-        # if its, lets check if y_pred is logits or probabilities
-        if binary:
-            # p is the probabilities
-            p = y_pred if np.all((y_pred >=0.0) & (y_pred <=1.0)) else sigmoid()(y_pred)
-            preds = (p > 0.5).astype(float)
-        else:# Multi class , use soft max if the values are not logits, then use argmax
-            p = y_pred if np.all((y_pred >=0.0) & (y_pred <=1.0)) else softmax()(y_pred) if y_pred.shape[1] > 1 else y_pred
-            preds = np.argmax(p, axis=-1, keepdims=True) if not np.all(p==y_pred) else p
-        # prepare y_true, it may have the shape of (number of examples, number of classes) or (number of examples, 1) `the 1 have number of classe unique values`
-        true_y = np.argmax(y_true, axis=-1, keepdims=True) if y_true.shape[1] > 1 else y_true
-        return preds, true_y
+    """
+    Base class for all performance metrics.
+    """
 
+    def __init__(self, task: Literal["classification", "regression"] = "classification") -> None:
+        self.task = task
+
+    def __call__(self, y_true: NDArray, y_pred: NDArray) -> Union[float, np.floating]:
+        prepared_preds, prepared_true = self._prepare(y_true, y_pred)
+        return self._formula(prepared_true, prepared_preds)
+
+    def _formula(self, y_true: NDArray, y_pred: NDArray) -> Any:
+        raise NotImplementedError("Subclasses must implement the _formula method.")
+
+    def _prepare(self, y_true: NDArray, y_pred: NDArray) -> Tuple[NDArray, NDArray]:
+        """
+        Normalizes data. For regression, it ensures shapes match.
+        For classification, it handles logits/one-hot conversion.
+        """
+        if self.task == "regression":
+            return y_pred, y_true
+
+        # Classification Logic (Thresholding/Argmax)
+        is_binary: bool = (y_true.shape[1] == 1)
+        if is_binary:
+            is_prob: np.bool = np.all((y_pred >= 0.0) & (y_pred <= 1.0))
+            probs: NDArray = y_pred if is_prob else Sigmoid().forward(y_pred)
+            preds: NDArray = (probs > 0.5).astype(np.float32)
+        else:
+            is_prob = np.all((y_pred >= 0.0) & (y_pred <= 1.0))
+            probs = y_pred if is_prob else Softmax().forward(y_pred)
+            preds = np.argmax(probs, axis=-1, keepdims=True)
+
+        true_labels = np.argmax(y_true, axis=-1, keepdims=True) if y_true.shape[1] > 1 else y_true
+        return preds, true_labels
+
+# =============================================================================
+# METRIC IMPLEMENTATIONS
+# =============================================================================
 
 class Accuracy(BaseMetric):
-    def _formula(self, y_true: np.ndarray[tuple[Any, ...], np.dtype[Any]], y_pred: np.ndarray[tuple[Any, ...], np.dtype[Any]]) -> Any:
+    """
+    Calculates the Accuracy score.
+    Formula: (TP + TN) / (TP + TN + FP + FN)
+    """
+
+    def _formula(self, y_true: NDArray, y_pred: NDArray) -> np.floating:
+        """Computes the mean of correct matches."""
         return np.mean(y_true == y_pred)
-    
+
 
 class Precision(BaseMetric):
-    def _formula(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.floating[Any]:
-        classes = np.unique(y_true)
-        precisions = []
+    """
+    Calculates the Macro-Averaged Precision score.
+    
+    Precision is the ability of the classifier not to label as positive 
+    a sample that is negative.
+    
+    """
+
+    def _formula(self, y_true: NDArray, y_pred: NDArray) -> np.floating:
+        classes: NDArray = np.unique(y_true)
+        class_precisions: List[float] = []
         
         for c in classes:
-            tp = np.sum((y_true == c) & (y_pred == c))
-            fp = np.sum((y_true != c) & (y_pred == c))
+            tp: int = np.sum((y_true == c) & (y_pred == c))
+            fp: int = np.sum((y_true != c) & (y_pred == c))
             
-            p = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-            precisions.append(p)
+            score: float = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            class_precisions.append(score)
             
-        return np.mean(precisions)
+        return np.mean(class_precisions)
+
 
 class Recall(BaseMetric):
-    def _formula(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.floating[Any]:
-        classes = np.unique(y_true)
-        recalls = []
+    """
+    Calculates the Macro-Averaged Recall score.
+    
+    Recall is the ability of the classifier to find all the positive samples.
+    """
+
+    def _formula(self, y_true: NDArray, y_pred: NDArray) -> np.floating:
+        classes: NDArray = np.unique(y_true)
+        class_recalls: List[float] = []
         
         for c in classes:
-            tp = np.sum((y_true == c) & (y_pred == c))
-            fn = np.sum((y_true == c) & (y_pred != c))
+            tp: int = np.sum((y_true == c) & (y_pred == c))
+            fn: int = np.sum((y_true == c) & (y_pred != c))
             
-            r = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-            recalls.append(r)
+            score: float = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            class_recalls.append(score)
             
-        return np.mean(recalls)
+        return np.mean(class_recalls)
+
 
 class FBetaScore(BaseMetric):
     """
-    F-Beta Score: (1 + beta^2) * (precision * recall) / ((beta^2 * precision) + recall)
-    F1-score is FBetaScore with beta=1.0
-    """
-    def __init__(self, beta: float = 1.0):
-        super().__init__()
-        self.beta_sq = beta ** 2
-        # We instantiate internal metrics to reuse their formulas
-        self.precision_fn = Precision()
-        self.recall_fn = Recall()
+    Calculates the F-Beta score.
+    
+    The F-beta score is the weighted harmonic mean of precision and recall.
+    F1-score is the special case where beta = 1.0.
 
-    def _formula(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.floating[Any] | float:
-        # Note: Precision and Recall classes will re-call _prepare internally 
-        # unless we modify the call structure, so we use their _formula directly
-        p = self.precision_fn._formula(y_true, y_pred)
-        r = self.recall_fn._formula(y_true, y_pred)
+    Attributes:
+        beta_sq (float): The squared beta parameter.
+    """
+
+    def __init__(self, beta: float = 1.0) -> None:
+        """
+        Args:
+            beta (float): Weight of recall in the harmonic mean. Defaults to 1.0.
+        """
+        super().__init__()
+        self.beta_sq: float = beta ** 2
+        self._precision_metric = Precision()
+        self._recall_metric = Recall()
+
+    def _formula(self, y_true: NDArray, y_pred: NDArray) -> Union[float, np.floating]:
+        """Computes the weighted harmonic mean of precision and recall."""
+        # Note: We pass through the internal _formula to avoid double-calling _prepare
+        p: np.floating = self._precision_metric._formula(y_true, y_pred)
+        r: np.floating = self._recall_metric._formula(y_true, y_pred)
         
         if (p + r) == 0:
             return 0.0
             
-        score = (1 + self.beta_sq) * (p * r) / ((self.beta_sq * p) + r)
+        score: np.floating = (1 + self.beta_sq) * (p * r) / ((self.beta_sq * p) + r)
         return score
+    
+
+# =============================================================================
+# REGRESSION METRICS
+# =============================================================================
+
+class MSE(BaseMetric):
+    """
+    Mean Squared Error (MSE).
+    Formula: (1/n) * Σ(y_true - y_pred)^2
+    """
+    def __init__(self) -> None:
+        super().__init__(task="regression")
+
+    def _formula(self, y_true: NDArray, y_pred: NDArray) -> np.floating:
+        return np.mean(np.square(y_true - y_pred))
+
+
+class RMSE(MSE):
+    """
+    Root Mean Squared Error (RMSE).
+    Formula: sqrt(MSE)
+    """
+    def _formula(self, y_true: NDArray, y_pred: NDArray) -> np.floating:
+        mse = super()._formula(y_true, y_pred)
+        return np.sqrt(mse)
+
+
+class RSquared(BaseMetric):
+    """
+    R-Squared (Coefficient of Determination).
+    Measures the proportion of variance explained by the model.
+    """
+    def __init__(self) -> None:
+        super().__init__(task="regression")
+
+    def _formula(self, y_true: NDArray, y_pred: NDArray) -> Union[float, np.floating]:
+        ss_res = np.sum(np.square(y_true - y_pred))
+        ss_tot = np.sum(np.square(y_true - np.mean(y_true)))
+        
+        if ss_tot == 0:
+            return 1.0 if ss_res == 0 else 0.0
+            
+        return 1 - (ss_res / ss_tot)

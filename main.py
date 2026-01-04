@@ -3,7 +3,7 @@ from sklearn.model_selection import train_test_split
 from src.nnlib import Sequential, Layer, Dropout, BatchNorm
 from src.nnlib.optimizers import Adam, SGD, AdamW
 from src.nnlib.schedulers import CosineScheduler, ExponentialDecay, StepDecay
-from src.nnlib.loss import BCE
+from src.nnlib.losses import BCE
 from src.pipeline import Trainer
 from src.utils.metrics import *
 import numpy as np
@@ -16,23 +16,23 @@ def test_trainer():
     y = y.reshape(-1, 1)
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
     model = Sequential([
-        BatchNorm(2),
+        #BatchNorm(2),
         Layer(2, 64, "relu"),
-        BatchNorm(64),
-        Dropout(0.1),
+        #BatchNorm(64),
+        Dropout(0.3),
         Layer(64, 1, "sigmoid"),
     ])
 
     loss_fn = BCE(from_logits=False)
-    epochs = 1000
-    batch_size = 32
+    epochs = 2000
+    batch_size = 128
     # Calculate total steps: (Total Samples / Batch Size) * Epochs
     total_steps = (len(X_train) // batch_size) * epochs
     sch = CosineScheduler(eta_min=1e-6, max_iterations=total_steps)
     lr = 0.001
     #sch = ExponentialDecay(0.999)
     #sch = StepDecay(0.9, total_steps // 100)
-    optimizer = AdamW(lr=lr, l2 = 0.01, l1=0., beta1=0.9, weigh_decay=0.01, scheduler=sch)
+    optimizer = AdamW(lr=lr, l2=0.001)
     # optimizer = SGD(lr=lr, l2 = 0.001, scheduler=sch)
     trainer = Trainer(
         model=model, optimizer=optimizer,loss_func=loss_fn,batch_size=batch_size

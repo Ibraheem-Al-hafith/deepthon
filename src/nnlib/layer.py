@@ -1,347 +1,470 @@
-"""Initialization for the nn weights"""
-from .activations import *
+"""
+Basic layer components for neural network construction.
+
+This module provides the structural building blocks for multi-layer perceptrons, 
+including weight initialization strategies, dense layers, regularization 
+techniques (Dropout), and normalization (Batch Norm).
+
+Classes:
+    Layer: Dense fully-connected layer with integrated activation.
+    Dropout: Regularization layer for preventing overfitting.
+    BatchNorm: Batch normalization for accelerating deep network training.
+    Sequential: Container for stacking modules in a linear pipeline.
+
+Functions:
+    HE(shape): Kaiming initialization for ReLU-based networks.
+    Xavier(shape, dist): Glorot initialization for Sigmoid/Tanh-based networks.
+"""
+
+from typing import Literal, Tuple, List, Any, Dict, Optional, Union, Callable
 import numpy as np
-from typing import Literal, Tuple, List
+from .activations import ReLU, Tanh, Sigmoid, Activation, Linear
 from .base import Module
 
+# Type alias for float-based NumPy arrays of any shape
+NDArray = np.ndarray[tuple[Any, ...], np.dtype[np.floating]]
 
 # =====================================================================
-#************************   UTILITIES   *******************************
+# UTILITIES: INITIALIZATION & FACTORIES
 # =====================================================================
-def HE(shape: Tuple[int, int]) -> np.ndarray:
-    """HE initialization for ReLU and startups"""
-    n_in, _ = shape[0], shape[1]
-    scale = np.sqrt(2 / n_in)
-    weights: np.ndarray = np.random.randn(*shape) * scale
+
+def HE(shape: Tuple[int, int]) -> NDArray:
+    """
+    HE initialization (Kaiming Init).
+    
+    Optimized for ReLU activations to maintain variance across layers and 
+    prevent vanishing or exploding gradients.
+
+    Args:
+        shape (Tuple[int, int]): Shape of the weights matrix (n_in, n_out).
+
+    Returns:
+        NDArray: Weights sampled from a normal distribution scaled by sqrt(2/n_in).
+    """
+    n_in: int = shape[0]
+    scale: float = np.sqrt(2 / n_in)
+    weights: NDArray = np.random.randn(*shape) * scale
     return weights
 
-def Xavier(shape: Tuple[int, int], dist: Literal["normal", "uniform"] = "normal") -> np.ndarray:
-    """Xavier initialization for sigmoid/tanh"""
-    n_in, n_out = shape[0], shape[1]
+def Xavier(shape: Tuple[int, int], dist: Literal["normal", "uniform"] = "normal") -> NDArray:
+    """
+    Xavier initialization (Glorot Init).
+    
+    Optimized for Sigmoid and Tanh activations by keeping the variance 
+    of the input and output gradients similar.
+
+    Args:
+        shape (Tuple[int, int]): Shape of the weights matrix (n_in, n_out).
+        dist (Literal["normal", "uniform"]): Distribution type to sample from.
+
+    Returns:
+        NDArray: Initialized weights matrix.
+
+    Raises:
+        ValueError: If 'dist' is not 'normal' or 'uniform'.
+    """
+    n_in: int = shape[0]
+    n_out: int = shape[1]
+    
     if dist == "normal":
-        scale = np.sqrt(2 / (n_in + n_out))
-        weights: np.ndarray = np.random.randn(*shape) * scale
+        scale: float = np.sqrt(2 / (n_in + n_out))
+        return np.random.randn(*shape) * scale
     elif dist == "uniform":
-        limit = np.sqrt(6 / (n_in+n_out))
-        weights: np.ndarray = np.random.uniform(low= -limit, high=limit, size=shape)
+        limit: float = np.sqrt(6 / (n_in + n_out))
+        return np.random.uniform(low=-limit, high=limit, size=shape)
     else:
         raise ValueError("The value of dist should be either 'normal' or 'uniform'")
-    return weights
 
-initialize = {
+# Factory mapping for weight initialization strategies
+initialize: Dict[str, Callable[[Tuple[int, int]], NDArray]] = {
     "random": lambda shape: np.random.randn(*shape) * 0.01,
     "relu": HE,
     "sigmoid": Xavier,
     "tanh": Xavier,
 }
 
-get_activation = {
+# Factory mapping for activation instances
+get_activation: Dict[str, Callable[[], Activation]] = {
     "relu": lambda: ReLU(),
     "sigmoid": lambda: Sigmoid(),
     "tanh": lambda: Tanh(),
     "linear": lambda: Linear(),
 }
 
-
 # =====================================================================
-#************************   Layer   *******************************
+# CORE LAYER
 # =====================================================================
 
 class Layer(Module):
     """
-    Dense Layer
+    Dense (Fully Connected) Layer.
+    
+    Performs a linear transformation followed by a non-linear activation.
+    Formula: a = activation(x @ W + b)
+
+    Attributes:
+        weights (NDArray): The learnable weight matrix.
+        bias (NDArray): The learnable bias vector.
+        activation (Activation): The activation function module.
+        x (Optional[NDArray]): Cached input for backpropagation.
+        dw (Optional[NDArray]): Gradient of the loss with respect to weights.
+        db (Optional[NDArray]): Gradient of the loss with respect to biases.
+
+    Methods:
+        forward(x): Computes the linear and non-linear transformation.
+        backward(grad_output): Computes gradients for x, weights, and biases.
+        get_parameters(): Returns a list of parameter and gradient dictionaries.
     """
+
     def __init__(
-            self, n_inputs: int, n_neurons: int,
-            activation: Literal["relu", "sigmoid", "tanh", "linear"] | Activation | None = None,
-            ) -> None:
+        self, 
+        n_inputs: int, 
+        n_neurons: int,
+        activation: Union[Literal["relu", "sigmoid", "tanh", "linear"], Activation, None] = None,
+    ) -> None:
         """
-        :param n_inputs: number of the input features
-        :type n_inputs: int 
-        :param n_neurons: number of the layer neurons
-        :type n_neurons: int
-        :param activation: activation function for the Layer
-        :type activation: Literal["relu", "sigmoid", "tanh", "linear"] | None | Activation (must have forward and backward methods)
+        Args:
+            n_inputs (int): Number of input features.
+            n_neurons (int): Number of neurons in this layer.
+            activation (Union[str, Activation, None]): Activation function to apply.
         """
         super().__init__()
-        # 1. initialize the weights :
-        self.weights: np.ndarray = initialize[
-            str(activation) if activation in initialize.keys()
-            else "sigmoid" if n_neurons == 1
-            else "relu"
-            ]((n_inputs, n_neurons)) # HE initialization as default, Xavier if one neuron, other wise based on the activation function
-        self.bias = np.zeros((1, n_neurons))
-        # 2. initialize the activation function :
-        self.activation = get_activation[activation or "linear"]() if not isinstance(activation, Activation) else activation# get the activation function, default is linear (or no activation)
-        self.dw = None
-        self.db = None
-    
-    def forward(self, x: np.ndarray) -> np.ndarray:
+        
+        # 1. Determine initialization strategy based on activation
+        init_key: str = str(activation) if isinstance(activation, str) and activation in initialize else \
+                        "sigmoid" if n_neurons == 1 else "relu"
+        
+        self.weights: NDArray = initialize[init_key]((n_inputs, n_neurons))
+        self.bias: NDArray = np.zeros((1, n_neurons))
+        
+        # 2. Setup Activation Module
+        if isinstance(activation, Activation):
+            self.activation: Activation = activation
+        else:
+            self.activation = get_activation[activation or "linear"]()
+            
+        # 3. State storage for backpropagation
+        self.x: Optional[NDArray] = None
+        self.dw: Optional[NDArray] = None
+        self.db: Optional[NDArray] = None
+
+    def forward(self, x: NDArray) -> NDArray:
         """
-        :param x: data to be forwarded, the shape is (number of samples * number of features)
-        :type x: np.ndarray
+        Performs the forward pass through the dense layer.
+        
+        Args:
+            x (NDArray): Input data of shape (Batch Size, Input Features).
+            
+        Returns:
+            NDArray: Layer activations of shape (Batch Size, Neurons).
         """
-        # 1. pass the x through the model to get the linear transformation (z)
-        z:np.ndarray  = x @ self.weights + self.bias # (m,n) @ (n, nn) + (nn, 1) = (m, nn)
-        # 2. pass the z through the non-linear part to get the activation (a)
-        a:np.ndarray = self.activation(z)
-        # 3. Handle cache saving the activation a for backward propagation in the case of training
+        # Linear transform: z = xW + b
+        z: NDArray = x @ self.weights + self.bias
+        a: NDArray = self.activation(z)
+        
         if self.training:
             self.x = x
-        # 4. return the activations
-        return a #(m, nn)
-    
-    def backward(self, grad_output: np.ndarray) -> np.ndarray:
-        # 1. get the dL_dz from the activation backward
-        dL_dz: np.ndarray = self.activation.backward(grad_output) # (m, nn)
-        # 2. get the dw, db and dx from dz using chain rule
-        self.dw = self.x.T @ dL_dz    #(n, m) @ (m, nn) = (n, nn)
-        self.db = np.sum(dL_dz,axis=0,keepdims = True) # (m, nn) -> (1, nn)
-        dL_dx:np.ndarray = dL_dz @ self.weights.T # (m, nn) @ (nn, n) -> (m, n)
+            
+        return a
 
+    def backward(self, grad_output: NDArray) -> NDArray:
+        """
+        Backward pass using the chain rule to compute local and upstream gradients.
+        
+        Args:
+            grad_output (NDArray): Upstream gradient (dL/da).
+            
+        Returns:
+            NDArray: Gradient with respect to the input x (dL/dx).
+
+        Raises:
+            RuntimeError: If backward is called without a prior forward pass in training mode.
+        """
+        if self.x is None:
+            raise RuntimeError("Backward called before forward or while not in training mode.")
+            
+        # Compute gradient through the activation function (dL/dz)
+        dL_dz: NDArray = self.activation.backward(grad_output)
+        
+        # Gradients for parameters: dw = x.T @ dz, db = sum(dz)
+        self.dw = self.x.T @ dL_dz
+        self.db = np.sum(dL_dz, axis=0, keepdims=True)
+        
+        # Gradient to pass to the previous layer: dx = dz @ W.T
+        dL_dx: NDArray = dL_dz @ self.weights.T
         return dL_dx
-    def get_parameters(self): 
+
+    def get_parameters(self) -> List[Dict[str, Any]]:
+        """
+        Returns the layer's weights and biases with their respective gradients.
+
+        Returns:
+            List[Dict[str, Any]]: List containing parameter, gradient, and name.
+        """
         return [
             {"param": self.weights, "grad": self.dw, "name": "weight"},
-            {"param": self.bias, "grad": self.db, "name": "bias"} 
+            {"param": self.bias, "grad": self.db, "name": "bias"}
         ]
 
-
-# =============================================================================
-# *************************** DROP OUT ****************************************
-# =============================================================================
+# =====================================================================
+# REGULARIZATION: DROP OUT
+# =====================================================================
 
 class Dropout(Module):
     """
-    Dropout is regularization method wich randomly drops a number of neurons to reduce overfitting
+    Dropout Layer for regularization.
+    
+    Randomly zeros out input elements with probability p during training. 
+    Uses "Inverted Dropout" where active neurons are scaled by 1/keep_prob.
+
+    Attributes:
+        drop_prob (float): Probability of zeroing an element.
+        keep_prob (float): Probability of keeping an element.
+        mask (Optional[NDArray]): Binary mask applied during the forward pass.
+
+    Methods:
+        forward(x): Applies the drop mask and scales inputs.
+        backward(grad): Propagates the gradient through the mask.
     """
+
     def __init__(self, p: float = 0.2) -> None:
         """
-        Docstring for __init__
-        
-        :param p: dropout probability
-        :type p: float
+        Args:
+            p (float): Probability of dropping a neuron (0 to 1).
         """
         super().__init__()
-        assert 0 <= p <= 1, "Drop probability should be between 0 and 1"
-        self.drop_prob = p
-        self.keep_prob = 1 - self.drop_prob
-    
-    def forward(self, x: np.ndarray) -> np.ndarray:
-        # If model mode is not training, return the original data
+        if not (0 <= p <= 1):
+            raise ValueError("Drop probability must be between 0 and 1")
+        self.drop_prob: float = p
+        self.keep_prob: float = 1 - p
+        self.mask: Optional[NDArray] = None
+
+    def forward(self, x: NDArray) -> NDArray:
+        """
+        Inverted Dropout forward pass. Scales values by 1/keep_prob during training.
+
+        Args:
+            x (NDArray): Input tensor.
+
+        Returns:
+            NDArray: Masked and scaled tensor if training, otherwise original tensor.
+        """
         if not self.training:
             return x
-        # else, randomly drop a portion from the data
-        # 1. calculate the mask
-        mask: np.ndarray = (np.random.rand(*x.shape) < self.keep_prob).astype(np.float32)
-        # 2. calculate the output and scale the output to serve the signal strength
-        output:np.ndarray = (mask * x) / self.keep_prob
-        # 3. store the mask for backward
-        self.mask = mask
+        
+        # Create a random mask and scale it immediately
+        self.mask = (np.random.rand(*x.shape) < self.keep_prob).astype(np.float32)
+        return (x * self.mask) / self.keep_prob
 
-        return output
-    def backward(self, x: np.ndarray) -> np.ndarray:
-        if self.training:
-            return x * self.mask / self.keep_prob
-        else:
-            return x
+    def backward(self, grad: NDArray) -> NDArray:
+        """
+        Dropout backward pass.
 
+        Args:
+            grad (NDArray): Upstream gradient.
 
-# =====================================================================
-#************************   MLP   *******************************
-# =====================================================================
-
-class Sequential(Module):
-    """
-    Multi Layer Perceptron
-    """
-    def __init__(self, layers: List[Module]):
-        super().__init__()
-        self.layers = layers
-    def __call__(self, *args: Any, **kwds: Any) -> Any:
-        return self.forward(*args, **kwds)
-    def train(self):
-        self.training = True
-        for layer in self.layers:
-            layer.train()
-    def eval(self):
-        self.training = False
-        for layer in self.layers:
-            layer.eval()
-    def forward(self, x):
-        for layer in self.layers:
-            x = layer.forward(x)
-        return x
-    def backward(self, grad):
-        for layer in reversed(self.layers):
-            grad = layer.backward(grad)
+        Returns:
+            NDArray: Gradient zeroed out where neurons were dropped.
+        """
+        if self.training and self.mask is not None:
+            return grad * self.mask / self.keep_prob
         return grad
-    def add(self, layers: Module| List[Module]):
-        if isinstance(layers, list):
-            for layer in layers:
-                self.add(layer)
-        else:
-            self.layers.append(layers)
 
-import numpy as np
+# =====================================================================
+# NORMALIZATION: BATCH NORM
+# =====================================================================
 
 class BatchNorm(Module):
-    def __init__(self, num_features, momentum=0.9, epsilon=1e-5):
-        super().__init__()
-        self.gamma = np.ones((1, num_features))
-        self.beta = np.zeros((1, num_features))
-        self.momentum = momentum
-        self.epsilon = epsilon
-        
-        # Parameters for inference (Running averages)
-        self.running_mean = np.zeros((1, num_features))
-        self.running_var = np.ones((1, num_features))
-        
-        # Gradients
-        self.dgamma = None
-        self.dbeta = None
-        
-        # Mode
-        self.training = True
+    """
+    Batch Normalization Layer.
+    
+    Normalizes inputs to have zero mean and unit variance per feature,
+    followed by a learnable scaling (gamma) and shifting (beta).
 
-    def forward(self, X):
+    Attributes:
+        gamma (NDArray): Learnable scaling parameter.
+        beta (NDArray): Learnable shifting parameter.
+        momentum (float): Momentum factor for running mean/variance computation.
+        epsilon (float): Small constant for numerical stability.
+        running_mean (NDArray): Exponential moving average of feature means.
+        running_var (NDArray): Exponential moving average of feature variances.
+        dgamma (Optional[NDArray]): Gradient with respect to gamma.
+        dbeta (Optional[NDArray]): Gradient with respect to beta.
+        X_hat (Optional[NDArray]): Normalized input stored for backward pass.
+        std_inv (Optional[NDArray]): Inverse standard deviation stored for backward pass.
+
+    Methods:
+        forward(X): Normalizes batch and updates running statistics.
+        backward(grad): Computes gradients for gamma, beta, and input X.
+        get_parameters(): Returns learnable parameters and their gradients.
+    """
+
+    def __init__(self, num_features: int, momentum: float = 0.9, epsilon: float = 1e-5) -> None:
+        """
+        Args:
+            num_features (int): Number of features (neurons) in the input.
+            momentum (float): Momentum for exponential moving averages.
+            epsilon (float): Epsilon for numerical stability in sqrt.
+        """
+        super().__init__()
+        self.gamma: NDArray = np.ones((1, num_features))
+        self.beta: NDArray = np.zeros((1, num_features))
+        self.momentum: float = momentum
+        self.epsilon: float = epsilon
+        
+        self.running_mean: NDArray = np.zeros((1, num_features))
+        self.running_var: NDArray = np.ones((1, num_features))
+        
+        self.dgamma: Optional[NDArray] = None
+        self.dbeta: Optional[NDArray] = None
+        
+        self.X_hat: Optional[NDArray] = None
+        self.std_inv: Optional[NDArray] = None
+
+    def forward(self, X: NDArray) -> NDArray:
+        """
+        Forward pass for BatchNorm.
+
+        Args:
+            X (NDArray): Input batch of shape (Batch Size, Features).
+
+        Returns:
+            NDArray: Normalized and scaled batch.
+        """
         if self.training:
-            # 1. Calculate Batch Statistics
-            batch_mean = np.mean(X, axis=0, keepdims=True)
-            batch_var = np.var(X, axis=0, keepdims=True)
+            # Calculate batch statistics
+            batch_mean: NDArray = np.mean(X, axis=0, keepdims=True)
+            batch_var: NDArray = np.maximum(np.var(X, axis=0, keepdims=True), 0.0)
             
-            # 2. Update Running Statistics for Inference
+            # Update global running stats for inference
             self.running_mean = self.momentum * self.running_mean + (1 - self.momentum) * batch_mean
             self.running_var = self.momentum * self.running_var + (1 - self.momentum) * batch_var
             
-            # 3. Normalize
-            self.X_centered = X - batch_mean
+            # Normalize
+            X_centered: NDArray = X - batch_mean
             self.std_inv = 1.0 / np.sqrt(batch_var + self.epsilon)
-            self.X_hat = self.X_centered * self.std_inv
+            self.X_hat = X_centered * self.std_inv
         else:
-            # Use Running Stats during Evaluation
+            # Use running stats for inference
             X_centered = X - self.running_mean
             std_inv = 1.0 / np.sqrt(self.running_var + self.epsilon)
             self.X_hat = X_centered * std_inv
 
-        # 4. Scale and Shift
         return self.gamma * self.X_hat + self.beta
 
-    def backward(self, dout):
-        batch_size = dout.shape[0]
+    def backward(self, grad: NDArray) -> NDArray:
+        """
+        Backward pass for BatchNorm using the simplified chain rule.
+
+        Args:
+            grad (NDArray): Upstream gradient.
+
+        Returns:
+            NDArray: Gradient with respect to the input X.
+        """
+        if self.X_hat is None or self.std_inv is None:
+            raise RuntimeError("Backward called before forward.")
+            
+        batch_size: int = grad.shape[0]
         
-        # Gradient w.r.t. gamma and beta
-        self.dgamma = np.sum(dout * self.X_hat, axis=0, keepdims=True)
-        self.dbeta = np.sum(dout, axis=0, keepdims=True)
+        # Gradients for learnable parameters
+        self.dgamma = np.sum(grad * self.X_hat, axis=0, keepdims=True)
+        self.dbeta = np.sum(grad, axis=0, keepdims=True)
         
-        # Gradient w.r.t. input (X) - Simplified chain rule version
-        dx_hat = dout * self.gamma
-        da = (1.0 / batch_size) * self.std_inv * (
+        # Gradient for the input data (da/dX)
+        dx_hat: NDArray = grad * self.gamma
+        da: NDArray = (1.0 / batch_size) * self.std_inv * (
             batch_size * dx_hat - np.sum(dx_hat, axis=0, keepdims=True) -
             self.X_hat * np.sum(dx_hat * self.X_hat, axis=0, keepdims=True)
         )
         return da
 
-    def get_parameters(self):
+    def get_parameters(self) -> List[Dict[str, Any]]:
+        """Returns gamma and beta parameters."""
         return [
             {"param": self.gamma, "grad": self.dgamma, "name": "gamma"},
             {"param": self.beta, "grad": self.dbeta, "name": "beta"}
         ]
 
+# =====================================================================
+# CONTAINER: SEQUENTIAL
+# =====================================================================
 
+class Sequential(Module):
+    """
+    Sequential Container for linear stacks of layers.
+    
+    Manages data flow and propagates state (training/evaluation) recursively 
+    through all child modules.
 
-def test_dropout():
-    import torch
-    import numpy as np
-    import random
-    import os
+    Attributes:
+        layers (List[Module]): Ordered list of layers in the model.
 
-    def set_seed(seed: int = 42) -> None:
+    Methods:
+        train(): Sets all child layers to training mode.
+        eval(): Sets all child layers to evaluation mode.
+        forward(x): Propagates input through all layers in order.
+        backward(grad): Propagates gradient through all layers in reverse order.
+        add(layers): Appends one or more modules to the stack.
+    """
 
-        """Sets the seed for generating random numbers in PyTorch, NumPy, and Python."""
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        # Set seed for all available GPUs
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)
-            # For deterministic behavior on CuDNN backend
-            torch.backends.cudnn.deterministic = True
-            torch.backends.cudnn.benchmark = False
+    def __init__(self, layers: Optional[List[Module]] = None) -> None:
+        """
+        Args:
+            layers (Optional[List[Module]]): Initial list of modules.
+        """
+        super().__init__()
+        self.layers: List[Module] = layers if layers is not None else []
 
-        # Set a fixed value for the hash seed
-        os.environ["PYTHONHASHSEED"] = str(seed)
-        print(f"Random seed set as {seed}")
+    def train(self) -> None:
+        """Sets the container and all constituent layers to training mode."""
+        self.training = True
+        for layer in self.layers:
+            layer.train()
 
-    set_seed()
-    from torch.nn import Dropout as t_Dropout
-    X = np.random.randn(500, 1)
-    p = 0.2
-    my_dropout = Dropout(p = p)
-    torch_dropout = t_Dropout(p = p)
-    my_dropout.train()
-    my_output = my_dropout.forward(X)
-    torch_dropout.train()
-    torch_output = torch_dropout(torch.from_numpy(X))
-    print(f"My dropout result   : {my_output.T}")
-    print(f"Torch dropout result: {torch_output.numpy().T}")
-    print(f"Matches: {np.allclose(my_output, torch_output)}")
+    def eval(self) -> None:
+        """Sets the container and all constituent layers to evaluation mode."""
+        self.training = False
+        for layer in self.layers:
+            layer.eval()
 
-def compare_with_pytorch():
-    # 1. Setup dimensions
-    import numpy as np
-    import torch
-    import torch.nn as nn
-    n_samples, n_inputs, n_neurons = 3, 4, 2
-    
-    # 2. Initialize your Layer (using Linear/None for direct comparison)
-    # Note: Using your class logic from the previous snippet
-    my_layer = Layer(n_inputs, n_neurons, activation="linear")
-    my_layer.training = True # Enable caching for backward
-    
-    # 3. Initialize PyTorch Layer
-    pt_layer = nn.Linear(n_inputs, n_neurons)
-    
-    # 4. SYNC WEIGHTS: PyTorch stores weights as (out, in), yours is (in, out)
-    pt_layer.weight.data = torch.from_numpy(my_layer.weights.T).float()
-    pt_layer.bias.data = torch.from_numpy(my_layer.bias).float()
-    
-    # 5. Prepare Input Data
-    x_np = np.random.randn(n_samples, n_inputs).astype(np.float32)
-    x_pt = torch.from_numpy(x_np).requires_grad_(True)
-    
-    # --- FORWARD PASS ---
-    out_my = my_layer.forward(x_np)
-    out_pt = pt_layer(x_pt)
-    
-    print("--- Forward Pass Check ---")
-    print(f"Difference: {np.abs(out_my - out_pt.detach().numpy()).max():.2e}")
-    
-    # --- BACKWARD PASS ---
-    # Create a dummy "upstream gradient" (dL/dY)
-    grad_output_np = np.ones((n_samples, n_neurons), dtype=np.float32)
-    grad_output_pt = torch.from_numpy(grad_output_np)
-    
-    # Your backward
-    dL_dw_my, dL_db_my, dL_dx_my = my_layer.backward(grad_output_np)
-    
-    # PyTorch backward
-    out_pt.backward(grad_output_pt)
-    
-    print("\n--- Backward Pass Check (Gradients) ---")
-    # Compare Weight Gradients (Remember PyTorch is transposed)
-    dw_diff = np.abs(dL_dw_my - pt_layer.weight.grad.numpy().T).max() # type: ignore
-    print(f"Weight Grad Difference: {dw_diff:.2e}")
-    
-    # Compare Bias Gradients (PyTorch bias grad is (n_neurons,), yours is (1, n_neurons))
-    db_diff = np.abs(dL_db_my.flatten() - pt_layer.bias.grad.numpy()).max() # type: ignore
-    print(f"Bias Grad Difference:   {db_diff:.2e}")
-    
-    # Compare Input Gradients
-    dx_diff = np.abs(dL_dx_my - x_pt.grad.numpy()).max() # type: ignore
-    print(f"Input Grad Difference:  {dx_diff:.2e}")
-if __name__ == "__main__":
-    # Run the comparison
-    compare_with_pytorch()
-    test_dropout()
+    def forward(self, x: NDArray) -> NDArray:
+        """
+        Forward pass through the sequential stack.
+
+        Args:
+            x (NDArray): Input tensor.
+
+        Returns:
+            NDArray: Output of the final layer in the sequence.
+        """
+        for layer in self.layers:
+            x = layer.forward(x)
+        return x
+
+    def backward(self, grad: NDArray) -> NDArray:
+        """
+        Backward pass through the stack in reverse order.
+
+        Args:
+            grad (NDArray): Upstream gradient from the loss function.
+
+        Returns:
+            NDArray: Gradient with respect to the initial input.
+        """
+        for layer in reversed(self.layers):
+            grad = layer.backward(grad)
+        return grad
+
+    def add(self, layers: Union[Module, List[Module]]) -> None:
+        """
+        Appends new layer(s) to the sequential stack.
+
+        Args:
+            layers (Union[Module, List[Module]]): A single module or list of modules to append.
+        """
+        if isinstance(layers, list):
+            for layer in layers:
+                self.add(layer)
+        else:
+            self.layers.append(layers)

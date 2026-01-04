@@ -1,221 +1,389 @@
 """
 Activation functions for neural networks.
-includes ReLU, Sigmoid, Tanh, and Linear.
+
+This module provides a suite of common activation functions including ReLU, 
+Sigmoid, Tanh, Softmax, and Linear, inheriting from a common base class to 
+handle caching and backpropagation logic.
+
+Classes:
+    Activation: Abstract base class for all activation layers.
+    ReLU: Rectified Linear Unit implementation.
+    Sigmoid: Sigmoid logistic function implementation.
+    Softmax: Normalized exponential implementation.
+    Tanh: Hyperbolic tangent implementation.
+    Linear: Identity activation implementation.
 """
 
+from typing import Any, Optional, Type, Union
 import numpy as np
 from .base import Module
-from typing import Any
 
+# Custom type alias for clarity in mathematical operations
+NDArray = np.ndarray[tuple[Any, ...], np.dtype[np.floating]]
+
+# =============================================================================
+# BASE ACTIVATION INTERFACE
+# =============================================================================
 
 class Activation(Module):
-    """Base class for activation functions"""
-    def __init__(self):
+    """
+    Base class for all activation functions.
+    
+    Handles standard neural network layer functionality including caching 
+    inputs for backpropagation and enforcing formula implementations.
+
+    Attributes:
+        cache (Optional[NDArray]): Stores the input or output tensor during 
+            the forward pass for use in gradient calculation.
+        training (bool): Inherited from Module; indicates if the layer is 
+            in training mode.
+
+    Methods:
+        forward(x): Performs the forward activation pass.
+        backward(grad_output): Computes the gradient using the chain rule.
+        __call__(x): Syntactic sugar for the forward pass.
+    """
+
+    def __init__(self) -> None:
+        """
+        Initialize the activation module and its cache.
+        """
         super().__init__()
-    def __call__(self, x: np.ndarray) -> np.ndarray:
+        self.cache: Optional[NDArray] = None
+
+    def __call__(self, x: NDArray) -> NDArray:
+        """
+        Allows the instance to be called like a function.
+
+        Args:
+            x (NDArray): Input tensor to be transformed.
+
+        Returns:
+            NDArray: The transformed tensor after activation.
+        """
         return self.forward(x)
-    def _formula(self, x: np.ndarray):
-        """Activation function formula"""
+
+    def _formula(self, x: NDArray) -> NDArray:
+        """
+        The mathematical definition of the activation function.
+
+        Args:
+            x (NDArray): Input tensor.
+
+        Returns:
+            NDArray: Result of applying f(x).
+
+        Raises:
+            NotImplementedError: If the subclass does not implement the formula.
+        """
         raise NotImplementedError("Activation functions must implement the _formula method.")
-    def _gradient(self, x: np.ndarray):
-        """Gradient of the activation function"""
+
+    def _gradient(self, x: NDArray) -> NDArray:
+        """
+        The local derivative of the activation function.
+
+        Args:
+            x (NDArray): Input tensor (usually the cached input).
+
+        Returns:
+            NDArray: Result of the derivative f'(x).
+
+        Raises:
+            NotImplementedError: If the subclass does not implement the gradient.
+        """
         raise NotImplementedError("Activation functions must implement the _gradient method.")
-    def forward(self, x):
+
+    def forward(self, x: NDArray) -> NDArray:
+        """
+        Performs the forward pass and caches input if in training mode.
+
+        Args:
+            x (NDArray): Input tensor of arbitrary shape.
+
+        Returns:
+            NDArray: Result of the activation function with the same shape as x.
+        """
+        # Save input for backward pass if we are training
         if self.training:
             self.cache = x
         return self._formula(x)
-    def backward(self, grad_output):
+
+    def backward(self, grad_output: NDArray) -> NDArray:
+        """
+        Performs the backward pass using the chain rule.
+
+        The formula applied is: dL/dx = dL/dy * dy/dx
+
+        Args:
+            grad_output (NDArray): Gradient of the loss with respect to the output.
+
+        Returns:
+            NDArray: Gradient of the loss with respect to the input (dL/dx).
+
+        Raises:
+            RuntimeError: If backward is called before a forward pass has cached data.
+        """
+        if self.cache is None:
+            raise RuntimeError("Backward pass attempted without a cached forward pass.")
+        
+        # Chain Rule: Upstream Gradient * Local Gradient
         return grad_output * self._gradient(self.cache)
 
+
+# =============================================================================
+# ACTIVATION IMPLEMENTATIONS
+# =============================================================================
+
 class ReLU(Activation):
-    """Rectified Linear Unit activation function
-    f(x) = max(0, x)
     """
-    def __init__(self):
+    Rectified Linear Unit activation function.
+    
+    Formula: f(x) = max(0, x)
+    Derivative: f'(x) = 1 if x > 0 else 0
+
+    Attributes:
+        cache (Optional[NDArray]): Inherited; stores input x.
+
+    Methods:
+        _formula(x): Implements the ReLU element-wise maximum.
+        _gradient(x): Implements the step function derivative.
+    """
+
+    def __init__(self) -> None:
+        """
+        Initialize the ReLU activation module.
+        """
         super().__init__()
-    def _formula(self, x):
+
+    def _formula(self, x: NDArray) -> NDArray:
+        """
+        Applies ReLU: max(0, x).
+
+        Args:
+            x (NDArray): Input tensor.
+
+        Returns:
+            NDArray: Tensor where negative values are replaced by zero.
+        """
         return np.maximum(0, x)
-    def _gradient(self, x):
+
+    def _gradient(self, x: NDArray) -> NDArray:
+        """
+        Computes the ReLU gradient.
+
+        Args:
+            x (NDArray): The cached input tensor.
+
+        Returns:
+            NDArray: Binary mask where 1 represents x > 0.
+        """
         return (x > 0).astype(x.dtype)
 
+
 class Sigmoid(Activation):
-    """Sigmoid activation function
-    f(x) = 1 / (1 + exp(-x))
     """
-    def __init__(self):
+    Sigmoid activation function.
+
+    Formula: f(x) = 1 / (1 + exp(-x))
+    Derivative: f'(x) = f(x) * (1 - f(x))
+
+    Attributes:
+        cache (Optional[NDArray]): Inherited; stores input x.
+
+    Methods:
+        _formula(x): Implements the logistic sigmoid function.
+        _gradient(x): Implements the derivative based on sigmoid output.
+    """
+
+    def __init__(self) -> None:
+        """
+        Initialize the Sigmoid activation module.
+        """
         super().__init__()
-    def _formula(self, x):
-        x = np.clip(x, -500, 500)
-        return 1 / (1 + np.exp(-x))
-    def _gradient(self, x):
-        return self._formula(x) * (1 - self._formula(x))
+
+    def _formula(self, x: NDArray) -> NDArray:
+        """
+        Applies Sigmoid with numerical clipping to prevent overflow.
+
+        Args:
+            x (NDArray): Input tensor.
+
+        Returns:
+            NDArray: Squeashed values between 0 and 1.
+        """
+        # Clipping x to avoid exp overflow in extreme values
+        x_clipped: NDArray = np.clip(x, -500, 500)
+        return 1 / (1 + np.exp(-x_clipped))
+
+    def _gradient(self, x: NDArray) -> NDArray:
+        """
+        Computes Sigmoid gradient using the f(x) * (1 - f(x)) identity.
+
+        Args:
+            x (NDArray): The cached input tensor.
+
+        Returns:
+            NDArray: Local gradient of the sigmoid.
+        """
+        sig: NDArray = self._formula(x)
+        return sig * (1 - sig)
+
 
 class Softmax(Activation):
     """
-    Softmax activation function
-    f(x) = exp(x) / sum(exp(x))
+    Softmax activation function with numerical stability.
+    
+    Used typically for multi-class classification to produce a probability 
+    distribution across the last dimension.
+
+    Attributes:
+        cache (Optional[NDArray]): In Softmax, this stores the OUTPUT (probabilities)
+            rather than the input to simplify the backward calculation.
+
+    Methods:
+        forward(x): Overridden to cache output probabilities.
+        backward(grad_output): Implements vectorized Jacobian-vector product.
+        _formula(x): Implements the stable softmax formula.
     """
-    def __init__(self):
-        super().__init__()
-    def forward(self, x):
-        x = self._formula(x)
-        if self.training:
-            self.cache = x
-        return x
-    def _formula(self, x: np.ndarray[tuple[Any, ...], np.dtype[Any]]):
-        e_x = np.exp(x - np.max(x, axis=-1, keepdims=True))
-        output = e_x / np.sum(e_x,axis=-1, keepdims=True)
-        return output
-    def _gradient(self, x: np.ndarray[tuple[Any, ...], np.dtype[Any]]):
-        """x is the gradient from the next layer
-        retruns the gradients of the current layer
-        A VECTORIZED IMPLEMENATION FOR SOFTMAX GRADIENTS
+
+    def _formula(self, x: NDArray) -> NDArray:
         """
-        M, C = x.shape # number of examples, number of classes
-        diag_matrix = (x.reshape(M, C, 1) * np.eye(C))
-        outer_mult = (x.reshape(M, C, 1) @ x.reshape(M, 1, C))
-        J = diag_matrix - outer_mult
-        return J
-    def backward(self, grad_output):
-        J = self._gradient(self.cache)
-        M, C, _ = J.shape
-        return (J @ grad_output.reshape(M, C, 1)).squeeze(-1)
+        Computes Softmax using the 'max subtraction' trick for stability.
+
+        Args:
+            x (NDArray): Input tensor of shape (..., Features).
+
+        Returns:
+            NDArray: Normalized probability distribution.
+        """
+        # Shift input by max value for numerical stability (prevents large exp results)
+        shift_x: NDArray = x - np.max(x, axis=-1, keepdims=True)
+        exps: NDArray = np.exp(shift_x)
+        return exps / np.sum(exps, axis=-1, keepdims=True)
+
+    def forward(self, x: NDArray) -> NDArray:
+        """
+        Forward pass for Softmax. Caches the output (P) for efficiency.
+
+        Args:
+            x (NDArray): Input logit tensor.
+
+        Returns:
+            NDArray: Probability tensor.
+        """
+        out: NDArray = self._formula(x)
+        if self.training:
+            self.cache = out
+        return out
+
+    def backward(self, grad_output: NDArray) -> NDArray:
+        """
+        Optimized vectorized backward pass for Softmax.
+        
+        Formula: P * (dL/dP - sum(dL/dP * P))
+
+        Args:
+            grad_output (NDArray): Upstream gradient.
+
+        Returns:
+            NDArray: Gradient with respect to the input logits.
+        """
+        if self.cache is None:
+            raise RuntimeError("Backward called before forward.")
+
+        p: NDArray = self.cache 
+        # Calculate the weighted sum of gradients
+        sum_grad_p: NDArray = np.sum(grad_output * p, axis=-1, keepdims=True)
+        return p * (grad_output - sum_grad_p)
 
 
 class Tanh(Activation):
-    """Hyperbolic Tangent activation function
-    f(x) = tanh(x)
     """
-    def __init__(self):
+    Hyperbolic Tangent activation function.
+
+    Formula: f(x) = tanh(x)
+    Derivative: f'(x) = 1 - f(x)^2
+
+    Attributes:
+        cache (Optional[NDArray]): Inherited; stores input x.
+
+    Methods:
+        _formula(x): Standard hyperbolic tangent.
+        _gradient(x): Derivative using the 1 - tanh^2 identity.
+    """
+
+    def __init__(self) -> None:
+        """
+        Initialize the Tanh activation module.
+        """
         super().__init__()
-    def _formula(self, x):
+
+    def _formula(self, x: NDArray) -> NDArray:
+        """
+        Applies np.tanh to the input.
+
+        Args:
+            x (NDArray): Input tensor.
+
+        Returns:
+            NDArray: Values squashed between -1 and 1.
+        """
         return np.tanh(x)
-    def _gradient(self, x):
+
+    def _gradient(self, x: NDArray) -> NDArray:
+        """
+        Computes Tanh gradient: 1 - tanh(x)^2.
+
+        Args:
+            x (NDArray): The cached input tensor.
+
+        Returns:
+            NDArray: Local gradient of tanh.
+        """
         return 1 - np.tanh(x) ** 2
 
+
 class Linear(Activation):
-    """Linear activation function
-    f(x) = x
     """
-    def __init__(self):
+    Linear (Identity) activation function.
+
+    Formula: f(x) = x
+    Derivative: f'(x) = 1
+
+    Attributes:
+        cache (Optional[NDArray]): Inherited; stores input x.
+
+    Methods:
+        _formula(x): Returns input unchanged.
+        _gradient(x): Returns ones.
+    """
+
+    def __init__(self) -> None:
+        """
+        Initialize the Linear activation module.
+        """
         super().__init__()
-    def _formula(self, x):
+
+    def _formula(self, x: NDArray) -> NDArray:
+        """
+        Identity function: returns the input as is.
+
+        Args:
+            x (NDArray): Input tensor.
+
+        Returns:
+            NDArray: The same input tensor.
+        """
         return x
-    def _gradient(self, x):
+
+    def _gradient(self, x: NDArray) -> NDArray:
+        """
+        Returns a gradient of ones with the same shape as input.
+
+        Args:
+            x (NDArray): The cached input tensor.
+
+        Returns:
+            NDArray: Tensor of ones with shape matching x.
+        """
         return np.ones_like(x)
-
-
-def testing():
-    import torch
-    from torch.nn import (
-        ReLU as TorchReLU,
-        Sigmoid as TorchSigmoid,
-        Tanh as TorchTanh,
-        Identity as TorchLinear,
-    )
-    x = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
-    relu = ReLU()
-    print("ReLU Forward:", relu(x))
-    print("ReLU Torch Forward:", TorchReLU()(torch.from_numpy(x)))
-    # relu.training = True
-    relu.backward(np.ones_like(x))
-    print("ReLU Backward:", relu.backward(np.ones_like(x)))
-    
-    sigmoid = Sigmoid()
-    print("\nSigmoid Forward:", sigmoid(x))
-    print("Sigmoid Torch Forward:", TorchSigmoid()(torch.from_numpy(x)))
-    # sigmoid.training = True
-    sigmoid.backward(np.ones_like(x))
-    print("Sigmoid Backward:", sigmoid.backward(np.ones_like(x)))
-    
-    tanh = Tanh()
-    print("\nTanh Forward:", tanh(x))
-    print("Tanh Torch Forward:", TorchTanh()(torch.from_numpy(x)))
-    # tanh.training = True
-    tanh.backward(np.ones_like(x))
-    print("Tanh Backward:", tanh.backward(np.ones_like(x)))
-    
-    linear = Linear()
-    print("\nLinear Forward:", linear(x))
-    print("Linear Torch Forward:", TorchLinear()(torch.from_numpy(x)))
-    #linear.training = True
-    linear.backward(np.ones_like(x))
-    print("Linear Backward:", linear.backward(np.ones_like(x)))
-
-def test_softmax():
-    import numpy as np
-    import time
-
-    # --- Your Implementation (Generalized Jacobian) ---
-    def user_gradient(p):
-        M, C = p.shape
-        # Computes diag(p) - p*p^T for each sample
-        diag_matrix = (p.reshape(M, C, 1) * np.eye(C))
-        outer_mult = (p.reshape(M, C, 1) @ p.reshape(M, 1, C))
-        J = diag_matrix - outer_mult
-        return J
-
-    def user_backward(cache, grad_output):
-        # cache here is the probability matrix P
-        J = user_gradient(cache)
-        M, C, _ = J.shape
-        return (J @ grad_output.reshape(M, C, 1)).squeeze(-1)
-
-    # --- Optimized Implementation (Specialized Shortcut) ---
-    def specialized_backward(P, Y):
-        M = P.shape[0]
-        return (P - Y) / M
-
-    # --- Helper: Numerical Stability Softmax ---
-    def softmax(X):
-        exps = np.exp(X - np.max(X, axis=1, keepdims=True))
-        return exps / np.sum(exps, axis=1, keepdims=True)
-
-    # --- Comparison Setup ---
-    M, C = 10, 4
-    np.random.seed(42)
-    X = np.random.randn(M, C)
-    Y = np.eye(C)[np.random.randint(0, C, M)] # Random One-Hot Targets
-
-    # 1. Forward Pass
-    s = Softmax()
-    P = s.forward(X)
-
-    # 2. Compute "grad_output" for your generalized function
-    # This is dL/dP = -Y/P. We divide by M to match the mean loss.
-    grad_L_wrt_P = -(Y / (P + 1e-12)) / M
-
-    # 3. Execute both
-    grad_user = user_backward(P, grad_L_wrt_P)
-    grad_user = s.backward(grad_L_wrt_P)
-    grad_specialized = specialized_backward(P, Y)
-
-    # --- Verification ---
-    is_equal = np.allclose(grad_user, grad_specialized)
-    print(f"Mathematical Equivalence Match: {is_equal}")
-
-    if is_equal:
-        print(f"Difference (Max Absolute Error): {np.max(np.abs(grad_user - grad_specialized))}")
-
-    # --- Performance Benchmarking (Scaling to C=1000) ---
-    M_large, C_large = 10, 3
-    P_large = softmax(np.random.randn(M_large, C_large))
-    Y_large = np.eye(C_large)[np.random.randint(0, C_large, M_large)]
-    grad_L_wrt_P_large = -(Y_large / (P_large + 1e-12)) / M_large
-
-    start = time.time()
-    _ = user_backward(P_large, grad_L_wrt_P_large)
-    time_user = time.time() - start
-
-    start = time.time()
-    _ = specialized_backward(P_large, Y_large)
-    time_specialized = time.time() - start
-
-    print(f"\n--- Performance (M={M_large}, C={C_large}) ---")
-    print(f"Generalized Approach: {time_user:.5f}s")
-    print(f"Specialized Approach: {time_specialized:.5f}s")
-    print(f"Speedup: {time_user / time_specialized:.1f}x")
-    
-if __name__ == "__main__":
-    testing()
-    test_softmax()

@@ -1,66 +1,144 @@
+"""
+Data Preprocessing Utilities.
+
+This module provides tools for preparing datasets for machine learning, 
+including data splitting with support for shuffling and stratification.
+
+Functions:
+    train_test_split: Partitions arrays or matrices into random train and test subsets.
+"""
+
 import numpy as np
-from typing import Any, Tuple
+from typing import Any, Tuple, Union, Optional, overload, List
 
-def train_test_split(x:np.ndarray, y: np.ndarray | None = None, test_size:float = 0.2,
-                    stratify: np.ndarray | None = None, shuffle: bool = True,random_state: int|None= None
-                    ) -> Tuple[np.ndarray, np.ndarray] | Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+# Type alias for floating or integer NumPy arrays
+NDArray = np.ndarray[tuple[Any, ...], np.dtype[Any]]
+
+
+
+@overload
+def train_test_split(
+    x: NDArray, 
+    y: None = None, 
+    test_size: float = 0.2, 
+    stratify: Optional[NDArray] = None, 
+    shuffle: bool = True, 
+    random_state: Optional[int] = None
+) -> Tuple[NDArray, NDArray]: ...
+
+@overload
+def train_test_split(
+    x: NDArray, 
+    y: NDArray, 
+    test_size: float = 0.2, 
+    stratify: Optional[NDArray] = None, 
+    shuffle: bool = True, 
+    random_state: Optional[int] = None
+) -> Tuple[NDArray, NDArray, NDArray, NDArray]: ...
+
+def train_test_split(
+    x: np.ndarray, 
+    y: Optional[np.ndarray] = None, 
+    test_size: float = 0.2,
+    stratify: Optional[np.ndarray] = None, 
+    shuffle: bool = True, 
+    random_state: Optional[int] = None
+) -> Union[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
     """
-    Split a given data to train and test sets
-    
-    :param x: Data to be splitted, usually the features data
-    :type x: np.ndarray
-    :param y: Target data, optional
-    :type y: np.ndarray | None
-    :param test_size: the proportion of data to be splitted
-    :type test_size: float
-    :param Stratify: split the data using stratified parts
-    :type stratify: np.ndarray | None
-    :param shuffle: whether to shuffle the data before splitting, default is true
-    :type shffle: bool
-    :random_state: the random state for the shuffle
-    :type random_state: int | None
-    :return: the returned datasets, (train, validation) if y is none, (xtrain, xtest, ytrain, ytes) if both x and y provided
-    :rtype: Tuple[ndarray[_AnyShape, dtype[Any]], ndarray[_AnyShape, dtype[Any]]] | Tuple[ndarray[_AnyShape, dtype[Any]], ndarray[_AnyShape, dtype[Any]], ndarray[_AnyShape, dtype[Any]], ndarray[_AnyShape, dtype[Any]]]
+    Splits datasets into random train and test subsets.
+
+    Provides a utility to partition feature and target arrays. Supports 
+    stratification to maintain class proportions in classification tasks.
+
+    Args:
+        x (NDArray): Feature data to be split.
+        y (Optional[NDArray]): Target data. If provided, returns four arrays.
+        test_size (float): The proportion of the dataset to include in the test split.
+        stratify (Optional[NDArray]): Array used to perform a stratified split.
+        shuffle (bool): Whether or not to shuffle the data before splitting.
+        random_state (Optional[int]): Seed for the random number generator.
+
+    Returns:
+        Union[Tuple[NDArray, NDArray], Tuple[NDArray, NDArray, NDArray, NDArray]]: 
+            Tuple containing (x_train, x_test) or (x_train, x_test, y_train, y_test).
+
+    Raises:
+        ValueError: If input lengths are inconsistent or parameters are invalid.
     """
+    n_samples = x.shape[0]
+    n_test_target = int(n_samples * test_size) # The exact total we need for test
+    rng = np.random.default_rng(random_state)
+    indices = np.arange(n_samples)
 
-    assert    (x.size == y.size if y is not None else False)\
-            | (x.size == stratify.size if stratify is not None else False) \
-            | (x.size == y.size == stratify.size if (y is not None and stratify is not None) else False) \
-            | (y is None and stratify is None) \
-            ,"the provided x, y and z must be the same length"
-    assert    (stratify.shape in [(len(stratify),), (len(stratify),1)] if stratify is not None else True)\
-        ,"stratify must be a one dimenstional array"
-    if (not shuffle) and (random_state is not None): raise ValueError("cannot set random state while shuffle is false, remove random state or set shuffle to true")
-    indices = np.arange(x.size)
-    random_generator = np.random.default_rng(random_state) if random_state is not None else np.random.default_rng()
-
-    test_idx = np.array([])
     if stratify is not None:
-        uniques = np.unique(stratify)
-        for unq in uniques:
-            ind = np.where(stratify == unq)[0]
+        # Validate stratify length
+        if stratify.shape[0] != n_samples:
+            raise ValueError("Stratify must be the same length as x")
+            
+        classes, class_indices = np.unique(stratify, return_inverse=True)
+        test_indices = []
+        
+        # Calculate how many samples to take from each class
+        for i in range(len(classes)):
+            c_idx = indices[class_indices == i]
             if shuffle:
-                random_generator.shuffle(ind)
-            test_idx = np.append(test_idx,ind[:int(ind.size * test_size)]).astype(int)
-            print(ind, test_idx, sep="\n")
+                rng.shuffle(c_idx)
+            
+            # Use rounding that leans toward reaching the target n_test_target
+            # We take a proportional slice for each class
+            n_class_test = max(1, round(len(c_idx) * test_size))
+            test_indices.extend(c_idx[:n_class_test].tolist())
+            
+        # If rounding created a slight mismatch (e.g., 6 instead of 5), 
+        # trim or pad to match n_test_target exactly
+        if len(test_indices) > n_test_target:
+            test_indices = test_indices[:n_test_target]
+        elif len(test_indices) < n_test_target:
+            # Add remaining indices that aren't in test yet
+            remaining = np.setdiff1d(indices, test_indices)
+            test_indices.extend(remaining[:n_test_target - len(test_indices)].tolist())
     else:
-        test_idx = indices[:int(x.size * test_size)]
-    train_idx = np.setdiff1d(indices, test_idx)
+        if shuffle:
+            rng.shuffle(indices)
+        test_indices = indices[:n_test_target].tolist()
+
+    test_idx_arr = np.array(test_indices)
+    train_idx_arr = np.setdiff1d(indices, test_idx_arr)
+
+    # Final shuffle to mix classes back together
     if shuffle:
-        random_generator.shuffle(train_idx)
-        random_generator.shuffle(test_idx)
+        rng.shuffle(train_idx_arr)
+        rng.shuffle(test_idx_arr)
+
     if y is not None:
-        return x[train_idx], x[test_idx], y[train_idx], y[test_idx]
-    return x[train_idx], x[test_idx]
+        return x[train_idx_arr], x[test_idx_arr], y[train_idx_arr], y[test_idx_arr]
+    return x[train_idx_arr], x[test_idx_arr]
 
 
-def main():
-    x = np.arange(100, 110)
-    y = np.array([1,1,1,1,0,0,0,0,0,1])
-    print(x)
-    print(y)
-    for arr in train_test_split(x, y, stratify=y, test_size=0.5):
-        print(arr)
+# =============================================================================
+# EXAMPLE USAGE
+# =============================================================================
 
-if __name__=="__main__":
+def main() -> None:
+    """Demonstrates stratified splitting."""
+    # Features 100-109
+    x: NDArray = np.arange(100, 110)
+    # Targets with class imbalance (60% class 0, 40% class 1)
+    y: NDArray = np.array([1, 1, 1, 1, 0, 0, 0, 0, 0, 1])
+    
+    print("Original Features:", x)
+    print("Original Targets: ", y)
+    
+    # Perform 50/50 split with stratification on y
+    xtrain, xtest, ytrain, ytest = train_test_split(
+        x, y, stratify=y, test_size=0.5
+    )
+
+    print("\n--- Split Results ---")
+    print("X Train:", xtrain)
+    print("Y Train:", ytrain)
+    print("X Test: ", xtest)
+    print("Y Test: ", ytest)
+
+if __name__ == "__main__":
     main()

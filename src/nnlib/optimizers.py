@@ -1,157 +1,246 @@
-import numpy as np
-from .schedulers import *
 """
-### Phase 1: The BaseOptimizer (Parent) 🏛️
-This class manages the "administrative" tasks.
-1. **Initialize**:
-    * Store hyper-parameters (lr,l1 ,l2 ).
-    * Initialize an empty dictionary `self.state` to store velocity/buffers.
-    * Initialize `self.iterations = 0` to track the number of steps.
-2. **Learning Rate Management**:
-    * Create a helper method (`_get_lr`) that checks if a scheduler exists. If yes, it calculates the new rate; if no, it returns the base .
-3. **The Step Loop**:
-    * Increment `self.iterations`.
-    * Get the `current_lr`.
-    * **Loop** through every layer in the model.
-    * **Loop** through every parameter (weight/bias) in that layer.
-4. **Parameter Preparation**:
-    * Generate a **Unique Key** (e.g., `layer_index_param_name`).
-    * If the key isn't in `self.state`, create a zero-filled array of the same shape as the parameter. 🏁
-    * **Regularize**: Calculate `total_grad = grad + (self.l2 * param) + (self.l1 * sign(param))`. ⚖️
-5. **Execution**:
-    * Call the child's `_compute_update` method, passing the `total_grad`, the `state` (velocity) for that key, and the `current_lr`.
-    * Subtract the returned update from the parameter **in-place** (`param -= update`).
-"""
-class Optimizer:
-    def __init__(self, lr=0.01, l1=0.0, l2=0.0, scheduler=None):
-        self.lr = lr
-        self.l1 = l1
-        self.l2 = l2
-        self.scheduler = scheduler
-        self.iterations = 0
-        self.state = {} # Stores velocity, etc.
+Optimizers Library for Neural Network Training.
 
-    def _get_lr(self):
-        # If a scheduler exists, use it; otherwise, use the base lr
+This module provides a modular framework for parameter optimization, decoupling 
+the administrative logic (state management, regularization) from the specific 
+mathematical update rules (SGD, Adam, etc.).
+
+Classes:
+    BaseOptimizer: Abstract base for managing parameter updates and state.
+    SGD: Stochastic Gradient Descent with momentum.
+    RMSProp: Adaptive learning rate optimizer using squared gradient moving averages.
+    Adam: Adaptive Moment Estimation combining momentum and RMSProp.
+    AdamW: Adam with decoupled weight decay for better generalization.
+"""
+
+from typing import Any, Dict, List, Optional, Union, Protocol, Tuple
+import numpy as np
+from .base import Module
+from .schedulers import BaseScheduler
+
+# Type alias for float-based NumPy arrays
+NDArray = np.ndarray[tuple[Any, ...], np.dtype[np.floating]]
+
+# =============================================================================
+# BASE OPTIMIZER
+# =============================================================================
+
+class BaseOptimizer:
+    """
+    Foundational orchestrator for all optimization strategies.
+
+    Manages the administrative lifecycle of training, including state tracking 
+    for moments/velocity, gradient regularization (L1/L2), and coordination 
+    with learning rate schedulers.
+
+    Attributes:
+        lr (float): Initial learning rate.
+        l1 (float): L1 regularization factor (Lasso).
+        l2 (float): L2 regularization factor (Ridge).
+        scheduler (Optional[Scheduler]): Learning rate adjustment strategy.
+        iterations (int): Global counter for the number of update steps taken.
+        state (Dict[str, Any]): Persistent storage for optimizer-specific data 
+            (e.g., velocity, moments) keyed by layer and parameter name.
+
+    Methods:
+        step(layers): Iterates through layers and applies the update rule.
+        _compute_update(grad, state, current_lr): Abstract math update rule.
+    """
+
+    def __init__(
+        self, 
+        lr: float = 0.01, 
+        l1: float = 0.0, 
+        l2: float = 0.0, 
+        scheduler: Optional[BaseScheduler] = None
+    ) -> None:
+        self.lr: float = lr
+        self.l1: float = l1
+        self.l2: float = l2
+        self.scheduler: Optional[BaseScheduler] = scheduler
+        self.iterations: int = 0
+        self.state: Dict[str, Any] = {}
+
+    def _get_lr(self) -> float:
+        """Determines the current learning rate based on the scheduler."""
         if self.scheduler:
             return self.scheduler.get_lr(self.lr, self.iterations)
         return self.lr
-    def _init_state(self, param):
-        """Default state is just a zero array (for SGD, RMSProp)"""
+
+    def _init_state(self, param: NDArray) -> Any:
+        """Initializes the state buffer for a parameter (defaults to zeros)."""
         return np.zeros_like(param)
 
-    def step(self, layers):
+    def step(self, layers: List[Module]) -> None:
+        """
+        Updates model parameters based on their current gradients.
+
+        Args:
+            layers (List[Module]): A list of layers containing parameters 
+                and gradients (retrieved via get_parameters()).
+        """
         self.iterations += 1
-        current_lr = self._get_lr()
+        current_lr: float = self._get_lr()
 
         for i, layer in enumerate(layers):
             if not hasattr(layer, 'get_parameters'):
                 continue
 
+            # Iterates through weights and biases
             for entry in layer.get_parameters():
-                param = entry["param"]
-                grad = entry["grad"]
-                name = entry["name"]
+                param: NDArray = entry["param"]
+                grad: NDArray = entry["grad"]
+                name: str = entry["name"]
                 
-                # 1. Create a unique key for the state dictionary
-                key = f"{i}_{name}"
+                # 1. State Retrieval/Initialization
+                key: str = f"{i}_{name}"
                 if key not in self.state:
                     self.state[key] = self._init_state(param)
                 
-                # 2. Add Regularization to the gradient
-                total_grad = grad.copy()
+                # 2. Apply Gradient Regularization
+                total_grad: NDArray = grad.copy()
                 if self.l2 > 0:
                     total_grad += self.l2 * param
                 if self.l1 > 0:
                     total_grad += self.l1 * np.sign(param)
 
-                # 3. Call the child's specific math
-                update = self._compute_update(total_grad, self.state[key], current_lr)
+                # 3. Calculate mathematical update
+                update: NDArray = self._compute_update(total_grad, self.state[key], current_lr)
                 
-                # 4. Apply the update
+                # 4. Apply Parameter Update
+                # Decoupled Weight Decay logic for AdamW-style optimizers
                 if hasattr(self, "weight_decay"):
-                    param[:] -= update + (current_lr * self.__getattribute__("weight_decay") * param)
+                    wd_factor: float = getattr(self, "weight_decay")
+                    param[:] -= (update + (current_lr * wd_factor * param))
                 else:
                     param[:] -= update
-    def _compute_update(self, *args, **kwrds):
-        raise NotImplementedError
 
-### Phase 2: The SGD Optimizer (Child) 🏎️
-
-# This class only handles the specific "physics" of the movement.
-# 
-# 1. **Inherit**: Extend the `BaseOptimizer`.
-# 2. **Compute Update**:
-# * Receive the `grad`, the `state` (the specific velocity buffer for this weight), and the `current_lr`.
-# * **Update Velocity**: Calculate the new velocity: .
-# * **Store**: Update the `state` array in-place so the change persists in the parent's dictionary.
-# * **Return**: Send back the scaled step: .
+    def _compute_update(self, grad: NDArray, state: Any, current_lr: float) -> NDArray:
+        """Mathematical update logic to be implemented by child classes."""
+        raise NotImplementedError("Subclasses must implement _compute_update.")
 
 
-class SGD(Optimizer):
-    def __init__(self, lr=0.01, l1=0.0, l2=0.0, beta=0.9, scheduler=None):
-        # Initialize the parent class first
+# =============================================================================
+# OPTIMIZER IMPLEMENTATIONS
+# =============================================================================
+
+class SGD(BaseOptimizer):
+    """
+    Stochastic Gradient Descent with Momentum.
+
+    Navigates high-curvature regions by maintaining a velocity buffer that 
+    dampens oscillations.
+
+    Attributes:
+        beta (float): Momentum coefficient (typically 0.9).
+    """
+
+    def __init__(
+        self, 
+        lr: float = 0.01, 
+        l1: float = 0.0, 
+        l2: float = 0.0, 
+        beta: float = 0.9, 
+        scheduler: Optional[BaseScheduler] = None
+    ) -> None:
         super().__init__(lr, l1, l2, scheduler)
-        self.beta = beta
+        self.beta: float = beta
 
-    def _compute_update(self, grad, state, current_lr):
-        # 1. Update the state (velocity) in-place
-        # Note: 'state' is a reference to the array in self.state[key]
+    def _compute_update(self, grad: NDArray, state: NDArray, current_lr: float) -> NDArray:
+        """Update: v = beta * v + grad; return lr * v"""
         state[:] = self.beta * state + grad
-        
-        # 2. Return the step to be subtracted
         return current_lr * state
-    
-class RMSProp(Optimizer):
-    def __init__(self, lr=0.01, rho=0.99, epsilon=1e-7, l1=0.0, l2=0.0, scheduler=None):
-        super().__init__(lr, l1, l2, scheduler)
-        self.rho = rho
-        self.epsilon = epsilon
 
-    def _compute_update(self, grad, state, current_lr):
-        # Update the moving average of squared gradients
+
+class RMSProp(BaseOptimizer):
+    """
+    Root Mean Square Propagation.
+
+    Adaptive learning rate optimizer that normalizes gradients by the 
+    root mean square of their moving average.
+    """
+
+    def __init__(
+        self, 
+        lr: float = 0.01, 
+        rho: float = 0.99, 
+        epsilon: float = 1e-7, 
+        l1: float = 0.0, 
+        l2: float = 0.0, 
+        scheduler: Optional[BaseScheduler] = None
+    ) -> None:
+        super().__init__(lr, l1, l2, scheduler)
+        self.rho: float = rho
+        self.epsilon: float = epsilon
+
+    def _compute_update(self, grad: NDArray, state: NDArray, current_lr: float) -> NDArray:
+        """Update: s = rho * s + (1-rho) * grad^2; return (lr * grad) / sqrt(s + eps)"""
         state[:] = self.rho * state + (1 - self.rho) * np.square(grad)
-        
-        # Calculate the adaptive step
         return (current_lr * grad) / (np.sqrt(state) + self.epsilon)
-    
 
-class Adam(Optimizer):
-    def __init__(self, lr=0.001, beta1=0.9, beta2=0.999, epsilon=1e-7, l1=0.0, l2=0.0, scheduler=None):
+
+class Adam(BaseOptimizer):
+    """
+    Adaptive Moment Estimation.
+
+    Combines momentum and adaptive scaling with bias correction for 
+    improved stability in early training stages.
+    """
+
+    def __init__(
+        self, 
+        lr: float = 0.001, 
+        beta1: float = 0.9, 
+        beta2: float = 0.999, 
+        epsilon: float = 1e-7, 
+        l1: float = 0.0, 
+        l2: float = 0.0, 
+        scheduler: Optional[BaseScheduler] = None
+    ) -> None:
         super().__init__(lr, l1, l2, scheduler)
-        self.beta1 = beta1
-        self.beta2 = beta2
-        self.epsilon = epsilon
+        self.beta1: float = beta1
+        self.beta2: float = beta2
+        self.epsilon: float = epsilon
 
-    def _compute_update(self, grad, state, current_lr):
-        # 1. Update first and second moments
-        state["m"][:] = self.beta1 * state["m"] + (1 - self.beta1) * grad
-        state["v"][:] = self.beta2 * state["v"] + (1 - self.beta2) * np.square(grad)
-
-        # 2. Bias correction
-        m_hat = state["m"] / (1 - self.beta1 ** self.iterations)
-        v_hat = state["v"] / (1 - self.beta2 ** self.iterations)
-        
-        # 3. Final update calculation
-        return (current_lr * m_hat) / (np.sqrt(v_hat) + self.epsilon)
-    
-    def _init_state(self, param):
-        """Override the parent method because we need poth momentum and velocity"""
+    def _init_state(self, param: NDArray) -> Dict[str, NDArray]:
+        """Initializes both first (m) and second (v) moments."""
         return {
             "m": np.zeros_like(param), 
             "v": np.zeros_like(param)
         }
 
+    def _compute_update(self, grad: NDArray, state: Dict[str, NDArray], current_lr: float) -> NDArray:
+        # 1. Update moments
+        state["m"][:] = self.beta1 * state["m"] + (1 - self.beta1) * grad
+        state["v"][:] = self.beta2 * state["v"] + (1 - self.beta2) * np.square(grad)
+
+        # 2. Apply bias correction to counteract zero-initialization
+        m_hat: NDArray = state["m"] / (1 - self.beta1 ** self.iterations)
+        v_hat: NDArray = state["v"] / (1 - self.beta2 ** self.iterations)
+        
+        # 3. Calculate adaptive update
+        return (current_lr * m_hat) / (np.sqrt(v_hat) + self.epsilon)
+
+
 class AdamW(Adam):
-    def __init__(self, lr=0.001, beta1=0.9, beta2=0.999, epsilon=1e-7, l1=0.0, l2=0.01, scheduler=None, weigh_decay = 0.01):
-        # We call the Adam init but explicitly pass weight_decay=True
-        super().__init__(
-            lr=lr, 
-            beta1=beta1, 
-            beta2=beta2, 
-            epsilon=epsilon, 
-            l1=l1, 
-            l2=l2, 
-            scheduler=scheduler
-        )
-        self.weight_decay = weigh_decay
+    """
+    Adam with Decoupled Weight Decay.
+
+    Preferred for modern architectures like Transformers. It decouples weight 
+    decay from the adaptive gradient scaling to ensure regularization remains 
+    effective.
+    """
+
+    def __init__(
+        self, 
+        lr: float = 0.001, 
+        beta1: float = 0.9, 
+        beta2: float = 0.999, 
+        epsilon: float = 1e-7, 
+        l1: float = 0.0, 
+        l2: float = 0.0, 
+        scheduler: Optional[BaseScheduler] = None, 
+        weight_decay: float = 0.01
+    ) -> None:
+        super().__init__(lr, beta1, beta2, epsilon, l1, l2, scheduler)
+        self.weight_decay: float = weight_decay
