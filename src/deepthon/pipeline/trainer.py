@@ -157,7 +157,9 @@ class Trainer:
             do_eval: bool = (X_val is not None and y_val is not None) and ((epoch + 1) % self.eval_steps == 0)
             
             if do_eval:
-                val_loss, preds = self.validate(X_val, y_val)  # type: ignore (X_val checked in do_eval)
+                assert X_val is not None
+                assert y_val is not None
+                val_loss, preds = self.validate(X_val = X_val, y_val = y_val)
                 self.val_losses.append(val_loss)
                 
                 msg: str = f"Epoch {epoch+1}/{epochs} | Train Loss: {avg_train_loss:.4f} | Val Loss: {val_loss:.4f}"
@@ -199,7 +201,7 @@ class Trainer:
         self.model.eval()  # Deactivate training behavior
         output: NDArray = np.empty_like(X_val)
         # Iterate through X_val
-        for i in range(0, X_val.size, self.val_batch_size):
+        for i in range(0, len(X_val), self.val_batch_size):
             output[i: i+self.val_batch_size] = self.model.forward(X_val[i: i+self.val_batch_size]) 
         # Calculate the loss
         loss: float = float(self.loss_func(y_val, output))
