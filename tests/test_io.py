@@ -2,6 +2,7 @@ from deepthon.utils.io import save_model, load_model
 from deepthon.nn import Sequential, Layer
 from deepthon.nn.layers import Dropout, BatchNorm
 import numpy as np
+import os
 
 
 
@@ -14,7 +15,7 @@ def test_save_load_functions():
         Layer(8, 1, activation="sigmoid")
     ])
     
-    path: str = "./archive/model.npz"
+    path: str = "./tests/model.npz"
     
     save_model(model1, path=path)
     
@@ -32,3 +33,6 @@ def test_save_load_functions():
             continue
         for entry1, entry2 in zip(getattr(layer1, "get_parameters")(), getattr(layer2, "get_parameters")()):
             assert np.all(entry1["param"] == entry2["param"])
+
+    if os.path.exists(path):
+        os.remove(path)
