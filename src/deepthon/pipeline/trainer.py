@@ -13,6 +13,7 @@ import numpy as np
 import math
 from typing import Literal, Dict, List, Optional, Union, Any, Tuple, Callable
 from ..utils.metrics import Accuracy, FBetaScore, Precision, Recall
+from .dataloaders import DataGenerator
 
 # Type Aliases for clarity
 NDArray = np.ndarray[tuple[Any, ...], np.dtype[np.floating]]
@@ -123,22 +124,27 @@ class Trainer:
         best_val_loss: float = np.inf
         stop_counter: int = 0
 
+        # if inputs is raw data, wrap it in our DataGenerator class :
+        if isinstance(X_train, np.ndarray):
+            train_gen = DataGenerator(X_train, y_train, batch_size=self.batch_size, shuffle=shuffle)
+        else:
+            train_gen = X_train
         
 
         for epoch in range(epochs):
             self.model.train()  # Activate training mode (e.g., enable Dropout)
             
             # 1. Shuffling logic
-            indices: NDArray | np.typing.NDArray[Any]= np.random.permutation(n_samples) if shuffle else np.arange(n_samples)
-            X_shuffled: NDArray = X_train[indices]
-            y_shuffled: NDArray = y_train[indices]
+            # indices: NDArray | np.typing.NDArray[Any]= np.random.permutation(n_samples) if shuffle else np.arange(n_samples)
+            # X_shuffled: NDArray = X_train[indices]
+            # y_shuffled: NDArray = y_train[indices]
 
             epoch_loss: float = 0.0
             
             # 2. Mini-batch Iteration
-            for i in range(0, n_samples, self.batch_size):
-                X_batch: NDArray = X_shuffled[i : i + self.batch_size]
-                y_batch: NDArray = y_shuffled[i : i + self.batch_size]
+            for X_batch, y_batch in train_gen.get_batches():
+                #X_batch: NDArray = X_shuffled[i : i + self.batch_size]
+                #y_batch: NDArray = y_shuffled[i : i + self.batch_size]
 
                 # Forward pass: Compute predictions and loss
                 output: NDArray = self.model.forward(X_batch)
@@ -159,6 +165,7 @@ class Trainer:
             if do_eval:
                 assert X_val is not None
                 assert y_val is not None
+
                 val_loss, preds = self.validate(X_val = X_val, y_val = y_val)
                 self.val_losses.append(val_loss)
                 
@@ -199,10 +206,14 @@ class Trainer:
             Tuple[float, NDArray]: A tuple of (scalar loss, predictions).
         """
         self.model.eval()  # Deactivate training behavior
-        output: NDArray = np.empty_like(X_val)
+        output: NDArray | List[NDArray] = []
+        if isinstance(X_val, np.ndarray):
+            val_gen = DataGenerator(X_val, y_val, batch_size=self.val_batch_size, shuffle=False)
+        else :val_gen = X_val
         # Iterate through X_val
-        for i in range(0, len(X_val), self.val_batch_size):
-            output[i: i+self.val_batch_size] = self.model.forward(X_val[i: i+self.val_batch_size]) 
+        for X_batch,_ in val_gen.get_batches():
+            output.append(self.model.forward(X_batch))
+        output = np.concatenate(output, axis=0)
         # Calculate the loss
         loss: float = float(self.loss_func(y_val, output))
         
