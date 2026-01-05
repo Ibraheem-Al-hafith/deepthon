@@ -4,7 +4,6 @@ from deepthon.nn.activations import ReLU, Sigmoid
 from deepthon.nn.losses import BCE
 from deepthon.nn.optimizers import Adam
 from deepthon.pipeline import Trainer
-from deepthon.utils.metrics import Accuracy
 
 
 def test_trainer_runs_single_epoch():
@@ -20,7 +19,7 @@ def test_trainer_runs_single_epoch():
         model=model,
         optimizer=Adam(lr=1e-3),
         loss_func=BCE(),
-        metric_fc={"accuracy": Accuracy()}
+        metric_fn="accuracy"
     )
 
     trainer.train(X, y, epochs=1)

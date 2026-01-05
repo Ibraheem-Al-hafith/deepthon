@@ -202,7 +202,7 @@ class Layer(Module):
             List[Dict[str, Any]]: List containing parameter, gradient, and name.
         """
         return [
-            {"param": self.weights, "grad": self.dw, "name": "weight"},
+            {"param": self.weights, "grad": self.dw, "name": "weights"},
             {"param": self.bias, "grad": self.db, "name": "bias"}
         ]
 

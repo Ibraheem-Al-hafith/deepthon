@@ -14,22 +14,27 @@ It provides modular neural-network building blocks, training utilities, and opti
 - Minimal dependency footprint (NumPy only)
 
 ---
+## Prerequisites :
+- NumPy:
+```bash
+pip install numpy
+```
 
 ## Installation
 
-From PyPI (when published):
-
-```bash
-pip install deepthon
-````
-
-From source:
+From source (working):
 
 ```bash
 git clone https://github.com/Ibraheem-Al-hafith/deepthon
 cd deepthon
 pip install -e .
 ```
+
+From PyPI (when published):
+
+```bash
+pip install deepthon
+````
 
 ---
 
@@ -45,7 +50,7 @@ from deepthon.pipeline import Trainer
 from deepthon.utils.metrics import Accuracy
 
 X = np.random.randn(500, 2)
-y = (X[:, 0] * X[:, 1] > 0).astype(int).reshape(-1, 1)
+y = (X[:, 0] * X[:, 1] > 0).astype(float).reshape(-1, 1)
 
 model = Sequential([
     Layer(2, 16, activation=ReLU()),
