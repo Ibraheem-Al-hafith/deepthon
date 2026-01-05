@@ -41,6 +41,14 @@ pip install deepthon
 ## Quick Start
 
 ```python
+import numpy as np
+from deepthon.nn import Sequential, Layer
+from deepthon.nn.activations import ReLU, Sigmoid
+from deepthon.nn.losses import BCE
+from deepthon.nn.optimizers import Adam
+from deepthon.pipeline import Trainer
+from deepthon.utils.metrics import Accuracy
+
 X = np.random.randn(500, 2)
 y = (X[:, 0] * X[:, 1] > 0).astype(float).reshape(-1, 1)
     
