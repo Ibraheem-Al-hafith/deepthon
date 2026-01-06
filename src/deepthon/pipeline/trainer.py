@@ -9,225 +9,265 @@ Classes:
     Trainer: A high-level interface for training and evaluating models.
 """
 
-import numpy as np
+from __future__ import annotations
 import math
-from typing import Literal, Dict, List, Optional, Union, Any, Tuple, Callable
-from ..utils.metrics import Accuracy, FBetaScore, Precision, Recall
-from .dataloaders import DataGenerator
+import pickle
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union, Iterable, Literal, Callable
 
-# Type Aliases for clarity
-NDArray = np.ndarray[tuple[Any, ...], np.dtype[np.floating]]
+import numpy as np
+
+from ..utils.metrics import Accuracy, FBetaScore, Precision, Recall
+from .dataloaders import DataLoader
+
+NDArray = np.ndarray
 MetricLiteral = Literal["accuracy", "f1", "precision", "recall", None]
 
-# Global metrics registry
 METRICS: Dict[str, Any] = {
     "accuracy": Accuracy(),
     "f1": FBetaScore(),
     "precision": Precision(),
-    "recall": Recall()
+    "recall": Recall(),
 }
 
 
 class Trainer:
     """
-    Orchestrator for model training and evaluation.
-
-    The Trainer handles the iterative process of feeding batches to a model, 
-    calculating losses, updating parameters via an optimizer, and monitoring 
-    performance on validation data.
-
-    Attributes:
-        model (Any): The neural network model (expected to inherit from Module).
-        optimizer (Any): The optimization algorithm (e.g., SGD, Adam).
-        loss_func (Any): The loss function instance.
-        batch_size (int): Number of samples per training update.
-        early_stopping (bool): Whether to stop training if validation loss plateaus.
-        patience (int): Number of epochs to wait for improvement before stopping.
-        min_delta (float): Minimum change in validation loss to qualify as improvement.
-        val_batch_size (int): Number of samples per validation forward pass.
-        metric_fn (MetricLiteral): Key for the metric used during evaluation.
-        logging (Literal["steps", "epoch"]): Frequency type for console output.
-        logging_steps (Union[int, float]): Steps or percentage interval for logging.
-        eval_steps (int): Frequency of validation passes (in epochs).
-        train_losses (List[float]): History of average training losses per epoch.
-        val_losses (List[float]): History of validation losses.
-
-    Methods:
-        train(X_train, y_train, X_val, y_val, epochs, shuffle): Executes the training loop.
-        validate(X_val, y_val): Computes loss and predictions on validation data.
-        predict(X): Generates model predictions in evaluation mode.
+    Modular Trainer with checkpointing, generator support, and typed design.
+    Supports:
+        • Raw numpy arrays or DataLoader objects
+        • Save-every-N or best-on-validation checkpointing
+        • Resume training safely
     """
 
     def __init__(
-        self, 
-        model: Any, 
-        optimizer: Any, 
+        self,
+        model: Any,
+        optimizer: Any,
         loss_func: Any,
-        batch_size: int = 8, 
-        early_stopping: bool = False,
-        patience: int = 5, 
-        min_delta: float = 1e-4,
-        val_batch_size: Optional[int] = None, 
+        batch_size: int = 8,
+        val_batch_size: Optional[int] = None,
         metric_fn: MetricLiteral = None,
-        logging: Literal["steps", "epoch"] = "epoch", 
-        logging_steps: Union[int, float] = 0.1, 
-        eval_steps: int = 1
+        early_stopping: bool = False,
+        patience: int = 5,
+        min_delta: float = 1e-4,
+        logging: Literal["steps", "epoch"] = "epoch",
+        logging_steps: Union[int, float] = 0.1,
+        eval_steps: int = 1,
+        # --- checkpoint controls ---
+        checkpoint_dir: Optional[Union[str, Path]] = None,
+        save_every: Optional[int] = None,       # periodic
+        save_best: bool = True,                 # best val loss
     ) -> None:
-        """
-        Initializes the Trainer with model components and hyperparameters.
-        """
-        self.model: Any = model
-        self.optimizer: Any = optimizer
-        self.loss_func: Any = loss_func
-        self.early_stopping: bool = early_stopping
-        self.patience: int = patience
-        self.min_delta: float = min_delta
-        self.batch_size: int = batch_size
-        self.val_batch_size: int = val_batch_size or batch_size
-        self.metric_fn: MetricLiteral = metric_fn
-        self.logging: str = logging
-        self.logging_steps: Union[int, float] = logging_steps
-        self.eval_steps: int = eval_steps
 
+        self.model = model
+        self.optimizer = optimizer
+        self.loss_func = loss_func
+
+        self.batch_size = batch_size
+        self.val_batch_size = val_batch_size or batch_size
+
+        self.metric_fn = metric_fn
+
+        self.early_stopping = early_stopping
+        self.patience = patience
+        self.min_delta = min_delta
+
+        self.logging = logging
+        self.logging_steps = logging_steps
+        self.eval_steps = eval_steps
+
+        # checkpoint settings
+        self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
+        self.save_every = save_every
+        self.save_best = save_best
+
+        # histories
         self.train_losses: List[float] = []
         self.val_losses: List[float] = []
 
-    def train(
-        self, 
-        X_train: NDArray, 
-        y_train: NDArray, 
-        X_val: Optional[NDArray] = None, 
-        y_val: Optional[NDArray] = None, 
-        epochs: int = 10, 
-        shuffle: bool = True
+        # runtime training state
+        self.best_val_loss: float = float("inf")
+        self.stop_counter: int = 0
+        self.start_epoch: int = 0  # supports resume
+
+
+    # ------------------------------------------------------------------
+    # Data Handling — supports ndarray OR generator
+    # ------------------------------------------------------------------
+    def _ensure_generator(
+        self,
+        X: Union[NDArray, DataLoader],
+        y: Optional[NDArray],
+        batch_size: int,
+        shuffle: bool,
+    ) -> DataLoader:
+
+        if isinstance(X, DataLoader):
+            return X
+
+        assert y is not None, "y must be provided when using raw arrays"
+        return DataLoader(X, y, batch_size=batch_size, shuffle=shuffle)
+
+
+    # ------------------------------------------------------------------
+    # Checkpoint API
+    # ------------------------------------------------------------------
+    def save_checkpoint(
+        self,
+        epoch: int,
+        is_best: bool = False,
+        filename: str = "checkpoint.pkl",
     ) -> None:
-        """
-        Executes the full training lifecycle over multiple epochs.
+        if not self.checkpoint_dir:
+            return
 
-        Args:
-            X_train (NDArray): Training feature matrix.
-            y_train (NDArray): Training target labels.
-            X_val (Optional[NDArray]): Validation feature matrix.
-            y_val (Optional[NDArray]): Validation labels.
-            epochs (int): Number of times to iterate over the dataset.
-            shuffle (bool): Whether to re-order samples every epoch.
-        """
-        n_samples: int = X_train.shape[0]
-        steps_per_epoch: int = math.ceil(n_samples / self.batch_size)
-        total_steps: int = steps_per_epoch * epochs
-        
-        # Calculate logging interval
-        log_every_n: int = self.logging_steps if isinstance(self.logging_steps, int) else \
-            max(1, int(self.logging_steps * (total_steps if self.logging == "steps" else epochs)))
+        #self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        self.checkpoint_dir.mkdir(exist_ok=True)
 
-        # State tracking for Early Stopping
-        best_val_loss: float = np.inf
-        stop_counter: int = 0
+        payload = {
+            "epoch": epoch,
+            "model_state": self.model.get_state(),
+            "optimizer_state": getattr(self.optimizer, "get_state", lambda: None)(),
+            "history": {
+                "train_losses": self.train_losses,
+                "val_losses": self.val_losses,
+            },
+            "best_val_loss": self.best_val_loss,
+        }
 
-        # if inputs is raw data, wrap it in our DataGenerator class :
-        if isinstance(X_train, np.ndarray):
-            train_gen = DataGenerator(X_train, y_train, batch_size=self.batch_size, shuffle=shuffle)
-        else:
-            train_gen = X_train
-        
+        path = self.checkpoint_dir / filename
+        with open(path, "wb") as f:
+            pickle.dump(payload, f)
 
-        for epoch in range(epochs):
-            self.model.train()  # Activate training mode (e.g., enable Dropout)
-            
-            # 1. Shuffling logic
-            # indices: NDArray | np.typing.NDArray[Any]= np.random.permutation(n_samples) if shuffle else np.arange(n_samples)
-            # X_shuffled: NDArray = X_train[indices]
-            # y_shuffled: NDArray = y_train[indices]
+        if is_best:
+            best_path = self.checkpoint_dir / "best_model.pkl"
+            pickle.dump(payload, open(best_path, "wb"))
 
-            epoch_loss: float = 0.0
-            
-            # 2. Mini-batch Iteration
-            for X_batch, y_batch in train_gen.get_batches():
-                #X_batch: NDArray = X_shuffled[i : i + self.batch_size]
-                #y_batch: NDArray = y_shuffled[i : i + self.batch_size]
+        # print(f"checkpoint saved successfully for epoch {epoch}")
+    def load_checkpoint(self, path: Union[str, Path]) -> int:
+        """Returns the epoch to resume from."""
+        ckpt = pickle.load(open(path, "rb"))
 
-                # Forward pass: Compute predictions and loss
-                output: NDArray = self.model.forward(X_batch)
-                batch_loss: float = float(self.loss_func.forward(y_batch, output))
-                epoch_loss += batch_loss
+        self.model.load_state(ckpt["model_state"])
 
-                # Backward pass: Compute gradients and update weights
-                grad: NDArray = self.loss_func.backward(y_batch, output)
+        if "optimizer_state" in ckpt and ckpt["optimizer_state"] is not None:
+            self.optimizer.load_state(ckpt["optimizer_state"])
+
+        self.train_losses = ckpt["history"]["train_losses"]
+        self.val_losses = ckpt["history"]["val_losses"]
+        self.best_val_loss = ckpt.get("best_val_loss", float("inf"))
+
+        self.start_epoch = ckpt.get("epoch", 0)
+        return self.start_epoch
+
+
+    # ------------------------------------------------------------------
+    # Training
+    # ------------------------------------------------------------------
+    def train(
+        self,
+        X_train: Union[NDArray, DataLoader],
+        y_train: Optional[NDArray] = None,
+        X_val: Optional[Union[NDArray, DataLoader]] = None,
+        y_val: Optional[NDArray] = None,
+        epochs: int = 10,
+        shuffle: bool = True,
+    ) -> None:
+
+        train_gen = self._ensure_generator(X_train, y_train, self.batch_size, shuffle)
+
+        n_samples = len(train_gen)
+        steps_per_epoch = math.ceil(n_samples / self.batch_size)
+        total_steps = steps_per_epoch * epochs
+
+        log_every = (
+            self.logging_steps
+            if isinstance(self.logging_steps, int)
+            else max(1, int(self.logging_steps * (total_steps if self.logging == "steps" else epochs)))
+        )
+
+        for epoch in range(self.start_epoch, epochs):
+            self.model.train()
+            epoch_loss = 0.0
+
+            for X_batch, y_batch in train_gen:
+                outputs = self.model.forward(X_batch)
+
+                loss = float(self.loss_func.forward(y_batch, outputs))
+                epoch_loss += loss
+
+                grad = self.loss_func.backward(y_batch, outputs)
                 self.model.backward(grad)
                 self.optimizer.step(self.model.layers)
 
-            avg_train_loss: float = epoch_loss / steps_per_epoch
+            avg_train_loss = epoch_loss / steps_per_epoch
             self.train_losses.append(avg_train_loss)
 
-            # 3. Validation and Performance Monitoring
-            do_eval: bool = (X_val is not None and y_val is not None) and ((epoch + 1) % self.eval_steps == 0)
-            
-            if do_eval:
-                assert X_val is not None
-                assert y_val is not None
+            msg = f"Epoch {epoch+1}/{epochs} | Train Loss: {avg_train_loss:.4f}"
 
-                val_loss, preds = self.validate(X_val = X_val, y_val = y_val)
+            # ---------------- Validation ----------------
+            if X_val is not None and y_val is not None and ((epoch + 1) % self.eval_steps == 0):
+                val_loss, preds = self.validate(X_val, y_val)
                 self.val_losses.append(val_loss)
-                
-                msg: str = f"Epoch {epoch+1}/{epochs} | Train Loss: {avg_train_loss:.4f} | Val Loss: {val_loss:.4f}"
-                
-                # Compute optional metrics (Accuracy, F1, etc.)
+
+                msg += f" | Val Loss: {val_loss:.4f}"
+
                 if self.metric_fn:
-                    score: float = METRICS[self.metric_fn](y_val, preds)
+                    score = METRICS[self.metric_fn](y_val, preds)
                     msg += f" | {self.metric_fn}: {score:.4f}"
 
-                # 4. Early Stopping Logic
-                if val_loss < (best_val_loss - self.min_delta):
-                    best_val_loss = val_loss
-                    stop_counter = 0
-                else:
-                    stop_counter += 1
-                
-                if self.early_stopping and stop_counter >= self.patience:
-                    print(msg)
-                    print(f"Early stopping triggered at epoch {epoch+1}")
-                    break
-            else:
-                msg = f"Epoch {epoch+1}/{epochs} | Train Loss: {avg_train_loss:.4f}"
+                # --- Early stopping ---
+                if val_loss < (self.best_val_loss - self.min_delta):
+                    self.best_val_loss = val_loss
+                    self.stop_counter = 0
 
-            # 5. Logging
-            if (epoch + 1) % log_every_n == 0 or (epoch + 1) == epochs:
+                    if self.save_best:
+                        self.save_checkpoint(epoch+1, is_best=True)
+
+                else:
+                    self.stop_counter += 1
+                    if self.early_stopping and self.stop_counter >= self.patience:
+                        print(msg)
+                        print(f"Early stopping at epoch {epoch+1}")
+                        break
+
+            # --- periodic checkpoint ---
+            if self.save_every and ((epoch + 1) % self.save_every == 0):
+                self.save_checkpoint(epoch+1)
+
+            # logging
+            if (epoch + 1) % log_every == 0 or (epoch + 1) == epochs:
                 print(msg)
 
-    def validate(self, X_val: NDArray, y_val: NDArray) -> Tuple[float, NDArray]:
-        """
-        Performs evaluation on a validation dataset.
 
-        Args:
-            X_val (NDArray): Validation features.
-            y_val (NDArray): Validation targets.
+    # ------------------------------------------------------------------
+    # Validation / Prediction
+    # ------------------------------------------------------------------
+    def validate(
+        self,
+        X_val: Union[NDArray, DataLoader],
+        y_val: NDArray,
+    ) -> Tuple[float, NDArray]:
 
-        Returns:
-            Tuple[float, NDArray]: A tuple of (scalar loss, predictions).
-        """
-        self.model.eval()  # Deactivate training behavior
-        output: NDArray | List[NDArray] = []
-        if isinstance(X_val, np.ndarray):
-            val_gen = DataGenerator(X_val, y_val, batch_size=self.val_batch_size, shuffle=False)
-        else :val_gen = X_val
-        # Iterate through X_val
-        for X_batch,_ in val_gen.get_batches():
-            output.append(self.model.forward(X_batch))
-        output = np.concatenate(output, axis=0)
-        # Calculate the loss
-        loss: float = float(self.loss_func(y_val, output))
-        
-        return loss, output
+        self.model.eval()
+        outputs: List[NDArray]|NDArray = []
+
+        val_gen = (
+            self._ensure_generator(X_val, y_val, self.val_batch_size, shuffle=False)
+            if isinstance(X_val, np.ndarray)
+            else X_val
+        )
+
+        for X_batch, _ in val_gen:
+            outputs.append(self.model.forward(X_batch))
+
+        outputs = np.concatenate(outputs, axis=0)
+        loss = float(self.loss_func(y_val, outputs))
+
+        return loss, outputs
+
 
     def predict(self, X: NDArray) -> NDArray:
-        """
-        Generates predictions for the given input data.
-
-        Args:
-            X (NDArray): Input feature matrix.
-
-        Returns:
-            NDArray: Model predictions.
-        """
         self.model.eval()
-        return self.model(X)
+        return self.model.forward(X)

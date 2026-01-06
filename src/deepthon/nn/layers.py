@@ -385,6 +385,20 @@ class BatchNorm(Module):
             {"param": self.gamma, "grad": self.dgamma, "name": "gamma"},
             {"param": self.beta, "grad": self.dbeta, "name": "beta"}
         ]
+    def get_state(self):
+        state = super().get_state()
+        state.update({
+            "running_mean": self.running_mean,
+            "running_var": self.running_var,
+        })
+        return state
+
+    def load_state(self, state):
+        super().load_state(state)
+        if "running_mean" in state:
+            self.running_mean[...] = state["running_mean"]
+        if "running_var" in state:
+            self.running_var[...] = state["running_var"]
 
 # =====================================================================
 # CONTAINER: SEQUENTIAL
@@ -468,3 +482,20 @@ class Sequential(Module):
                 self.add(layer)
         else:
             self.layers.append(layers)
+    def get_parameters(self) -> List[Dict[str, Any]]:
+        params = []
+        for layer in self.layers:
+            params.extend(layer.get_parameters())
+        
+        return params
+    def get_state(self):
+        return {
+            f"layer_{i}": layer.get_state()
+            for i, layer in enumerate(self.layers)
+        }
+
+    def load_state(self, state):
+            for i, layer in enumerate(self.layers):
+                key = f"layer_{i}"
+                if key in state:
+                    layer.load_state(state[key])

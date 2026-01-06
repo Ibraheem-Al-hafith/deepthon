@@ -113,3 +113,33 @@ class Module:
         """
         # Placeholder logic: must be overridden for backpropagation logic
         raise NotImplementedError("Subclasses must implement the backward method.")
+    def get_parameters(self) -> List[Dict[str, Any]]:
+        """
+        Returns the layer's weights and biases with their respective gradients.
+
+        Returns:
+            List[Dict[str, Any]]: List containing parameter, gradient, and name.
+        """
+        return []
+    # --------------------------
+    # NEW: State Serialization
+    # --------------------------
+    
+    def get_state(self):
+        """
+        Returns persistent state for checkpointing.
+        Default: only parameters.
+        """
+        state = {}
+        for p in self.get_parameters():
+            state[p["name"]] = p["param"]
+        return state
+
+    def load_state(self, state):
+        """
+        Loads persistent state from checkpoint.
+        """
+        for p in self.get_parameters():
+            name = p["name"]
+            if name in state:
+                p["param"][...] = state[name]

@@ -118,6 +118,12 @@ class BaseOptimizer:
     def _compute_update(self, grad: NDArray, state: Any, current_lr: float) -> NDArray:
         """Mathematical update logic to be implemented by child classes."""
         raise NotImplementedError("Subclasses must implement _compute_update.")
+    def get_state(self):
+        """Save all the optimizer attributes"""
+        return self.__dict__
+    def load_state(self, state: Dict[str, Any]):
+        """retrieve the optimizer attributes from dictionary"""
+        self.__dict__.update(state)
 
 
 # =============================================================================
