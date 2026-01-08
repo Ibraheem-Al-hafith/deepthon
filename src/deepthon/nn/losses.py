@@ -135,6 +135,51 @@ class MSE(LOSS):
         """
         m: int = y_true.size
         return (2 / m) * (y_pred - y_true)
+class MAE(LOSS):
+    """
+    Mean Absolute Error (MAE) Loss.
+    
+    Commonly used for regression tasks where the goal is to predict 
+    continuous values.
+    Formula: L = (1/n) * Σ|y_true - y_pred|
+
+    Attributes:
+        None
+
+    Methods:
+        forward(y_true, y_pred): Computes the mean squared difference.
+        backward(y_true, y_pred): Computes the gradient (2/m) * (y_pred - y_true).
+    """
+
+    def forward(self, y_true: NDArray, y_pred: NDArray) -> np.floating:
+        """
+        Calculate the MSE loss.
+
+        Args:
+            y_true (NDArray): Target values.
+            y_pred (NDArray): Predicted values.
+
+        Returns:
+            np.floating: The mean of the squared errors.
+        """
+        # Calculate element-wise square difference and then the mean
+        return np.mean(np.abs(y_true - y_pred))
+
+    def backward(self, y_true: NDArray, y_pred: NDArray) -> NDArray:
+        """
+        Calculate the gradient of MSE loss.
+
+        The derivative of (1/m) * (y_t - y_p)^2 w.r.t y_p is (2/m) * (y_p - y_t).
+
+        Args:
+            y_true (NDArray): Target values.
+            y_pred (NDArray): Predicted values.
+
+        Returns:
+            NDArray: Gradient of the loss with respect to y_pred.
+        """
+        m: int = y_true.size
+        return (1 / m) * np.sign(y_pred - y_true)
 
 
 # =============================================================================

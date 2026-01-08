@@ -76,6 +76,8 @@ class Accuracy(BaseMetric):
     Calculates the Accuracy score.
     Formula: (TP + TN) / (TP + TN + FP + FN)
     """
+    def __init__(self):
+        super().__init__(task="classification")
 
     def _formula(self, y_true: NDArray, y_pred: NDArray) -> np.floating:
         """Computes the mean of correct matches."""
@@ -90,6 +92,8 @@ class Precision(BaseMetric):
     a sample that is negative.
     
     """
+    def __init__(self):
+        super().__init__(task="classification")
 
     def _formula(self, y_true: NDArray, y_pred: NDArray) -> np.floating:
         classes: NDArray = np.unique(y_true)
@@ -111,6 +115,8 @@ class Recall(BaseMetric):
     
     Recall is the ability of the classifier to find all the positive samples.
     """
+    def __init__(self):
+        super().__init__(task="classification")
 
     def _formula(self, y_true: NDArray, y_pred: NDArray) -> np.floating:
         classes: NDArray = np.unique(y_true)
@@ -142,7 +148,7 @@ class FBetaScore(BaseMetric):
         Args:
             beta (float): Weight of recall in the harmonic mean. Defaults to 1.0.
         """
-        super().__init__()
+        super().__init__(task="classification")
         self.beta_sq: float = beta ** 2
         self._precision_metric = Precision()
         self._recall_metric = Recall()
@@ -164,6 +170,17 @@ class FBetaScore(BaseMetric):
 # REGRESSION METRICS
 # =============================================================================
 
+class MAE(BaseMetric):
+    """
+    Mean Absolute Error (MAE).
+    Formula: (1/n) * Σ|y_true - y_pred|
+    """
+    def __init__(self) -> None:
+        super().__init__(task="regression")
+
+    def _formula(self, y_true: NDArray, y_pred: NDArray) -> np.floating:
+        return np.mean(np.abs(y_true - y_pred))
+    
 class MSE(BaseMetric):
     """
     Mean Squared Error (MSE).
@@ -181,6 +198,8 @@ class RMSE(MSE):
     Root Mean Squared Error (RMSE).
     Formula: sqrt(MSE)
     """
+    def __init__(self) -> None:
+        super().__init__()
     def _formula(self, y_true: NDArray, y_pred: NDArray) -> np.floating:
         mse = super()._formula(y_true, y_pred)
         return np.sqrt(mse)

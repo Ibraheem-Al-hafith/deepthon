@@ -17,17 +17,20 @@ from typing import Any, Dict, List, Optional, Tuple, Union, Iterable, Literal, C
 
 import numpy as np
 
-from ..utils.metrics import Accuracy, FBetaScore, Precision, Recall
+from ..utils.metrics import *
 from .dataloaders import DataLoader
 
-NDArray = np.ndarray
-MetricLiteral = Literal["accuracy", "f1", "precision", "recall", None]
+# NDArray = np.ndarray
+MetricLiteral = Literal["accuracy", "f1", "precision", "recall", "rmse", "mse", "r2", None]
 
 METRICS: Dict[str, Any] = {
     "accuracy": Accuracy(),
     "f1": FBetaScore(),
     "precision": Precision(),
     "recall": Recall(),
+    "mse": MSE(),
+    "rmse": RMSE(),
+    "r2": RSquared()
 }
 
 
@@ -68,6 +71,7 @@ class Trainer:
         self.val_batch_size = val_batch_size or batch_size
 
         self.metric_fn = metric_fn
+        self.metric = METRICS[str(metric_fn)] if metric_fn is not None else None
 
         self.early_stopping = early_stopping
         self.patience = patience
@@ -90,6 +94,7 @@ class Trainer:
         self.best_val_loss: float = float("inf")
         self.stop_counter: int = 0
         self.start_epoch: int = 0  # supports resume
+        self.current_epoch = 0
 
 
     # ------------------------------------------------------------------
@@ -115,18 +120,19 @@ class Trainer:
     # ------------------------------------------------------------------
     def save_checkpoint(
         self,
-        epoch: int,
+        epoch: Optional[int] = None,
         is_best: bool = False,
         filename: str = "checkpoint.pkl",
     ) -> None:
         if not self.checkpoint_dir:
             return
 
-        #self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        self.checkpoint_dir.mkdir(exist_ok=True)
+        # use the provided epoch or trainer's current_epoch
+        save_epoch = epoch if epoch is not None else self.current_epoch
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         payload = {
-            "epoch": epoch,
+            "epoch": save_epoch,
             "model_state": self.model.get_state(),
             "optimizer_state": getattr(self.optimizer, "get_state", lambda: None)(),
             "history": {
@@ -188,6 +194,8 @@ class Trainer:
         )
 
         for epoch in range(self.start_epoch, epochs):
+            self.current_epoch+=1
+
             self.model.train()
             epoch_loss = 0.0
 
