@@ -13,7 +13,7 @@ Classes:
     AdamW: Adam with decoupled weight decay for better generalization.
 """
 
-from typing import Any, Dict, List, Optional, Union, Protocol, Tuple
+from typing import Any, Dict, List, Optional
 import numpy as np
 from .base import Module
 from .schedulers import BaseScheduler

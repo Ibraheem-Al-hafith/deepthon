@@ -14,7 +14,7 @@ Classes:
     Linear: Identity activation implementation.
 """
 
-from typing import Any, Optional, Type, Union
+from typing import Any, Optional
 import numpy as np
 from .base import Module
 

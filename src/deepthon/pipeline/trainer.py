@@ -13,12 +13,30 @@ from __future__ import annotations
 import math
 import pickle
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union, Iterable, Literal, Callable
+from typing import Any, Dict, List, Optional, Tuple, Union, Literal
 
 import numpy as np
 
 from ..utils.metrics import *
+from ..nn.layers import Sequential
+from ..nn.optimizers import BaseOptimizer
+from ..nn.schedulers import BaseScheduler
+from ..nn.losses import LOSS
 from .dataloaders import DataLoader
+import logging
+
+
+# ---------------- Set up logger -------------------
+logger = logging.getLogger(__name__)
+_DEFAULT_FORMAT = (
+    "%(asctime)s | %(levelname)-8s | %(name)s |"
+    "%(funcName)s:%(lineno)d | %(message)s"
+)
+formatter = logging.Formatter(fmt=_DEFAULT_FORMAT)
+ch = logging.StreamHandler()
+ch.setFormatter(fmt=formatter)
+logger.addHandler(ch)
+# --------------------------------------------------
 
 # NDArray = np.ndarray
 MetricLiteral = Literal["accuracy", "f1", "precision", "recall", "rmse", "mse", "r2", None]
@@ -35,19 +53,34 @@ METRICS: Dict[str, Any] = {
 
 
 class Trainer:
-    """
-    Modular Trainer with checkpointing, generator support, and typed design.
-    Supports:
-        • Raw numpy arrays or DataLoader objects
-        • Save-every-N or best-on-validation checkpointing
-        • Resume training safely
+    """Orchestrates the training process for neural network models.
+
+    This class automates the training loop, including batching, shuffling, 
+    backpropagation, validation, and early stopping. It supports checkpointing
+    to local storage and can handle both raw NumPy arrays and DataLoader objects.
+
+    Attributes:
+        model (Sequential): The neural network model to train.
+        optimizer (BaseOptimizer): The optimization algorithm.
+        loss_func (LOSS): The loss function used for training and validation.
+        batch_size (int): Number of samples per training batch.
+        val_batch_size (int): Number of samples per validation batch.
+        metric (Optional[BaseMetric]): Metric object for evaluation.
+        early_stopping (bool): Whether to stop training if validation loss plateaus.
+        patience (int): Number of epochs to wait for improvement before stopping.
+        min_delta (float): Minimum change in loss to qualify as an improvement.
+        logging (str): Frequency of log output ('steps' or 'epoch').
+        checkpoint_dir (Optional[Path]): Directory where checkpoints are saved.
+        train_losses (List[float]): History of average training losses per epoch.
+        val_losses (List[float]): History of validation losses per epoch.
+        best_val_loss (float): Lowest validation loss achieved during training.
     """
 
     def __init__(
         self,
-        model: Any,
-        optimizer: Any,
-        loss_func: Any,
+        model: Sequential,
+        optimizer: BaseOptimizer,
+        loss_func: LOSS,
         batch_size: int = 8,
         val_batch_size: Optional[int] = None,
         metric_fn: MetricLiteral = None,
@@ -62,6 +95,27 @@ class Trainer:
         save_every: Optional[int] = None,       # periodic
         save_best: bool = True,                 # best val loss
     ) -> None:
+        """Initializes the Trainer with model, optimizer, and training configs.
+
+        Args:
+            model: The Sequential model instance to be trained.
+            optimizer: Optimizer instance (e.g., SGD, Adam).
+            loss_func: Loss function instance.
+            batch_size: Number of training samples per batch. Defaults to 8.
+            val_batch_size: Number of validation samples per batch. 
+                If None, defaults to batch_size.
+            metric_fn: Literal string identifying the metric (e.g., "accuracy").
+            early_stopping: If True, uses validation loss to stop training early.
+            patience: Epochs to wait for improvement before early stopping.
+            min_delta: Smallest improvement to reset the early stopping counter.
+            logging: Frequency of logging, either "steps" or "epoch".
+            logging_steps: If logging is "steps", number of steps between logs. 
+                If float, interpreted as a percentage of total steps.
+            eval_steps: Interval of epochs between validation runs.
+            checkpoint_dir: Path to directory for saving model checkpoints.
+            save_every: Frequency (in epochs) to save periodic checkpoints.
+            save_best: If True, saves a 'best_model.pkl' when val_loss improves.
+        """
 
         self.model = model
         self.optimizer = optimizer
@@ -145,14 +199,16 @@ class Trainer:
         path = self.checkpoint_dir / filename
         with open(path, "wb") as f:
             pickle.dump(payload, f)
-
+        logger.info(f"Successfully saved training configuration into :{path} - epoch: {epoch}")
         if is_best:
             best_path = self.checkpoint_dir / "best_model.pkl"
             pickle.dump(payload, open(best_path, "wb"))
+            logger.info(f"Successfully saved best model into :{best_path} - epoch: {epoch}")
 
-        # print(f"checkpoint saved successfully for epoch {epoch}")
+        # logger.info(f"checkpoint saved successfully for epoch {epoch}")
     def load_checkpoint(self, path: Union[str, Path]) -> int:
         """Returns the epoch to resume from."""
+        logger.info(f"Loading checkpoint from {path}")
         ckpt = pickle.load(open(path, "rb"))
 
         self.model.load_state(ckpt["model_state"])
@@ -165,6 +221,7 @@ class Trainer:
         self.best_val_loss = ckpt.get("best_val_loss", float("inf"))
 
         self.start_epoch = ckpt.get("epoch", 0)
+        logger.info(f"Successfully loaded checkpoint!!")
         return self.start_epoch
 
 
@@ -236,8 +293,8 @@ class Trainer:
                 else:
                     self.stop_counter += 1
                     if self.early_stopping and self.stop_counter >= self.patience:
-                        print(msg)
-                        print(f"Early stopping at epoch {epoch+1}")
+                        logger.info(msg)
+                        logger.info(f"Early stopping at epoch {epoch+1}")
                         break
 
             # --- periodic checkpoint ---
@@ -246,7 +303,7 @@ class Trainer:
 
             # logging
             if (epoch + 1) % log_every == 0 or (epoch + 1) == epochs:
-                print(msg)
+                logger.info(msg)
 
 
     # ------------------------------------------------------------------
@@ -266,12 +323,13 @@ class Trainer:
             if isinstance(X_val, np.ndarray)
             else X_val
         )
-
+        assert isinstance(outputs, list)
         for X_batch, _ in val_gen:
             outputs.append(self.model.forward(X_batch))
-
         outputs = np.concatenate(outputs, axis=0)
-        loss = float(self.loss_func(y_val, outputs))
+        
+        assert isinstance(outputs, np.ndarray)
+        loss:float = float(self.loss_func(y_val, outputs))
 
         return loss, outputs
 

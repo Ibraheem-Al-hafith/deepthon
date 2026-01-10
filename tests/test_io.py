@@ -1,4 +1,3 @@
-from deepthon.utils.io import save_model, load_model
 from deepthon.nn import Sequential, Layer
 from deepthon.nn.layers import Dropout, BatchNorm
 import numpy as np
@@ -17,9 +16,9 @@ def test_save_load_functions():
     
     path: str = "./tests/model.npz"
     
-    save_model(model1, path=path)
+    state = model1.get_state()
     
-    model: Sequential = Sequential([
+    model2: Sequential = Sequential([
         Layer(2, 4, activation="relu"),
         BatchNorm(4),
         Layer(4, 8, activation="relu"),
@@ -27,7 +26,7 @@ def test_save_load_functions():
         Layer(8, 1, activation="sigmoid")
     ])
     
-    model2 = load_model(model, path=path)
+    model2.load_state(state)
     for i, (layer1, layer2) in enumerate(zip(model1.layers, model2.layers)):
         if not hasattr(layer1, "get_parameters"):
             continue
@@ -36,3 +35,6 @@ def test_save_load_functions():
 
     if os.path.exists(path):
         os.remove(path)
+
+if __name__ == "__main__":
+    test_save_load_functions()

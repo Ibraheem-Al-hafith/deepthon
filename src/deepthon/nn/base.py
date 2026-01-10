@@ -9,7 +9,7 @@ Classes:
     Module: The abstract base class for all neural network building blocks.
 """
 
-from typing import Any, Optional, List, Dict
+from typing import Any, List, Dict
 
 
 class Module:
@@ -115,7 +115,7 @@ class Module:
         raise NotImplementedError("Subclasses must implement the backward method.")
     def get_parameters(self) -> List[Dict[str, Any]]:
         """
-        Returns the layer's weights and biases with their respective gradients.
+        Returns the layer's parameters with their respective gradients.
 
         Returns:
             List[Dict[str, Any]]: List containing parameter, gradient, and name.
@@ -135,9 +135,11 @@ class Module:
             state[p["name"]] = p["param"]
         return state
 
-    def load_state(self, state):
+    def load_state(self, state: Dict[str, Any]):
         """
         Loads persistent state from checkpoint.
+        Args:
+            state(Dict[str, Any]): the parameters new values dictionary.
         """
         for p in self.get_parameters():
             name = p["name"]
