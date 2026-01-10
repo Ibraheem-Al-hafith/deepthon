@@ -344,14 +344,15 @@ class BatchNorm(Module):
             # Normalize
             X_centered: NDArray = X - batch_mean
             self.std_inv = 1.0 / np.sqrt(batch_var + self.epsilon)
+            assert self.std_inv is not None
             self.X_hat = X_centered * self.std_inv
         else:
             # Use running stats for inference
             X_centered = X - self.running_mean
             std_inv = 1.0 / np.sqrt(self.running_var + self.epsilon)
             self.X_hat = X_centered * std_inv
-
-        return self.gamma * self.X_hat + self.beta
+        assert self.X_hat is not None
+        return np.multiply(self.gamma,self.X_hat) + self.beta
 
     def backward(self, grad: NDArray) -> NDArray:
         """

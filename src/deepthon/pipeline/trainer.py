@@ -323,12 +323,13 @@ class Trainer:
             if isinstance(X_val, np.ndarray)
             else X_val
         )
-
+        assert isinstance(outputs, list)
         for X_batch, _ in val_gen:
             outputs.append(self.model.forward(X_batch))
-
         outputs = np.concatenate(outputs, axis=0)
-        loss = float(self.loss_func(y_val, outputs))
+        
+        assert isinstance(outputs, np.ndarray)
+        loss:float = float(self.loss_func(y_val, outputs))
 
         return loss, outputs
 
