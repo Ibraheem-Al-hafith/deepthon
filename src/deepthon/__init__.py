@@ -1,6 +1,8 @@
 from .nn import (
     Sequential,
     Layer,
+    Dropout,
+    BatchNorm,
     activations,
     losses,
     optimizers,
@@ -12,6 +14,8 @@ from .utils import metrics, split
 __all__ = [
     "Sequential",
     "Layer",
+    "Dropout",
+    "BatchNorm",
     "activations",
     "losses",
     "optimizers",

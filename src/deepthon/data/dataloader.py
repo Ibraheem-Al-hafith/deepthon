@@ -1,6 +1,8 @@
 """
 deepthon.data.dataloader
 Handling Data loading logic
+Classes: 
+    DataLoader
 """
 
 

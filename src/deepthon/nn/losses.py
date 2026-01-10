@@ -8,12 +8,13 @@ model performance during training. It includes implementations for regression
 Classes:
     LOSS: Abstract base class for all loss functions.
     MSE: Mean Squared Error for regression tasks.
+    MAE: Mean Absolute Error for regression tasks.
     BCE: Binary Cross-Entropy for binary classification.
     CrossEntropy: Categorical Cross-Entropy for multi-class classification.
 """
 
 import numpy as np
-from typing import Any, Union, Optional
+from typing import Any, Union
 
 # Type alias for floating point NumPy arrays of any shape
 NDArray = np.ndarray[tuple[Any, ...], np.dtype[np.floating]]

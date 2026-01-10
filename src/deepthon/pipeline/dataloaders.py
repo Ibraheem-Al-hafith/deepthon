@@ -1,14 +1,23 @@
 import numpy as np
+from typing import Tuple, Optional, Generator, Any
 
 class DataLoader:
-    def __init__(self, X, y=None, batch_size=32, shuffle=True):
+    def __init__(self, X: np.ndarray, y: Optional[np.ndarray]=None, batch_size: int=32, shuffle: bool=True):
+        """
+        Make an efficient data loader for batching processing
+        Args:
+            X (np.ndarray): features data.
+            y (Optional[np.ndarray]): optional target data.
+            batch_size (int): number of instances to be returend at each iteration.
+            shuffle (bool): whethet to shuffle the data or not
+        """
         self.X = X
         self.y = y
         self.batch_size = batch_size
         self.shuffle = shuffle
         self._indices = np.arange(len(X))
 
-    def __iter__(self):
+    def __iter__(self) -> Any:
         if self.shuffle:
             np.random.shuffle(self._indices)
         for start in range(0, len(self.X), self.batch_size):

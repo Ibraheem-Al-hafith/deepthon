@@ -254,7 +254,7 @@ class Dropout(Module):
         
         # Create a random mask and scale it immediately
         self.mask = (np.random.rand(*x.shape) < self.keep_prob).astype(np.float32)
-        return (x * self.mask) / self.keep_prob
+        return np.divide((x * self.mask),self.keep_prob)
 
     def backward(self, grad: NDArray) -> NDArray:
         """
@@ -337,8 +337,9 @@ class BatchNorm(Module):
             batch_var: NDArray = np.maximum(np.var(X, axis=0, keepdims=True), 0.0)
             
             # Update global running stats for inference
+            sample_var: NDArray = np.maximum(np.var(X, axis=0, keepdims=True, ddof=1), 0.0)
             self.running_mean = self.momentum * self.running_mean + (1 - self.momentum) * batch_mean
-            self.running_var = self.momentum * self.running_var + (1 - self.momentum) * batch_var
+            self.running_var = self.momentum * self.running_var + (1 - self.momentum) * sample_var
             
             # Normalize
             X_centered: NDArray = X - batch_mean
