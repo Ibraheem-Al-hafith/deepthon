@@ -74,17 +74,35 @@ Each component is mathematically isolated and explicitly implemented.
 ---
 
 # 📦 Installation
+**uv installation**
+
+* 1. Download and build the dependencies:
 
 ```bash
-pip install numpy
 git clone https://github.com/Ibraheem-Al-hafith/deepthon
 cd deepthon
-pip install -e .
-````
+uv sync
+
+```
+
+* 2. Activate the environment:
+> A. for windows:
+
+```
+.venv/Sources/activate
+
+```
+> B. for mac/linux
+
+```
+.venv/bin/activate
+
+```
 
 ---
 
 # 🚀 Minimal Experiment
+**(note): you can check examples in [examples](/examples), see the next section**
 
 ```python
 import numpy as np
@@ -112,6 +130,15 @@ trainer = Trainer(
 )
 
 trainer.train(X, y, epochs=30)
+```
+
+# run examples :
+
+### run simple `sklearn` circles dataset experiment:
+
+```
+uv run examples/circles_classification.py
+
 ```
 
 ---
