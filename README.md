@@ -89,7 +89,7 @@ uv sync
 > A. for windows:
 
 ```
-.venv/Sources/activate
+.venv/Scripts/activate
 
 ```
 > B. for mac/linux
