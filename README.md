@@ -1,103 +1,119 @@
 
-# 🧠 **deepthon & deepthon_pipeline**
-
-### *A Minimal Deep Learning Framework & End-to-End Pipeline Built from Scratch with NumPy*
+---
 
 <div align="center">
-<img src="assets/img.png" alt="Deepthon Pipeline Header" width="600">
 
-## **Research-oriented • Transparent • Modular • Lightweight**
+# 🧠 **deepthon**
+### *A Minimal Deep Learning Framework Built from Scratch with NumPy*
+
+## **Research-oriented • Transparent • Mathematical • Lightweight**
+
+[![NumPy](https://img.shields.io/badge/Built%20with-NumPy-blue?style=for-the-badge)](https://numpy.org)
+[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
+[![Status](https://img.shields.io/badge/Status-Research--Grade-orange?style=for-the-badge)](#)
+[![Stars](https://img.shields.io/github/stars/Ibraheem-Al-hafith/deepthon?style=social)](https://github.com/Ibraheem-Al-hafith/deepthon)
+
+<img src="./assets/img.png" width="50%" height="50%" style="border-radius:10% "/>
+
+---
+
+### **Table of Contents**
+[Abstract](#-abstract) • [Motivation](#-motivation) • [Features](#-features) • [Installation](#-installation) 
+[Minimal Experiment](#-minimal-experiment) • [Pipeline & Automation](#-pipeline--automation-experiments) •
+[Codebase](#-codebase) • [Comparison](#-comparison) • [Roadmap](#-roadmap)
+
 </div>
 
+---
 
-## 📜 Abstract
+# 📜 Abstract
+**deepthon** is a **from-scratch neural network framework** implemented using only **NumPy**.  
+It is designed to serve as a **research, educational, and experimental platform** for understanding the internal mechanics of modern deep learning systems.
 
-**deepthon** is a **from-scratch neural network framework** designed to expose the mathematical systems behind modern AI. While production frameworks hide details behind automatic differentiation, **deepthon** treats neural networks as transparent numerical systems.
-
-**deepthon_pipeline** is the production-ready automation layer built on top of this engine. It demonstrates a complete machine learning lifecycle—from raw data ingestion to interactive deployment—using a clean, hackable design.
+Unlike PyTorch or TensorFlow, **deepthon exposes the mathematics** behind forward propagation, loss computation, and backpropagation.
 
 ---
 
-## 🧩 Key Features & Benchmarks
-
-* **Mathematical Transparency:** Implements forward propagation, backpropagation, and gradient-based optimization using only NumPy.
-* **Modular Pipeline:** A standardized workflow for data cleaning, stratified binning, and evaluation.
-* **Built-in Benchmarks:**
-* 🩺 **Breast Cancer:** Binary classification for medical diagnosis.
-* ✍️ **MNIST:** Multi-class handwritten digit recognition.
-* ⚡ **Turbine Energy:** Regression for industrial sensor data.
-
-
-
-| Feature | deepthon Ecosystem | Standard Frameworks |
-| --- | --- | --- |
-| **Autograd** | ❌ Under Dev | ✅ Yes |
-| **Transparency** | ⭐⭐⭐⭐⭐ | ⭐⭐ |
-| **Debug Mode** | Mathematics-first | Op-code-first |
-| **Dependencies** | NumPy only | Heavy |
+# 🧬 Motivation
+Modern deep learning frameworks hide critical details behind automatic differentiation and optimized kernels. This is excellent for production—but hides the "why" during research. **deepthon** treats neural networks not as black boxes, but as **numerical systems**.
 
 ---
 
-## 🛠️ Installation & Setup
+# ✨ Features
+| Category | Capabilities |
+|--------|--------------|
+| 🧠 Models | `Sequential` API, fully modular layers |
+| 🔢 Math | Manual forward & backward propagation |
+| ⚡ Optimization | SGD, Adam, RMSProp, LR schedulers |
+| 📉 Losses | MSE, BCE, Cross-Entropy |
+| 🧪 Automation | YAML-driven experiments, CLI, and UI |
+| 🪶 Deps | NumPy only |
 
-We recommend using **uv** for fast, reproducible environment management.
+---
 
-### 🐧 Linux / 🍎 Mac
+# 📦 Installation
+This project uses **uv** for high-performance workspace management.
 
 ```bash
-# Install uv
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Clone and setup project
-git clone https://github.com/Ibraheem-Al-hafith/deepthon_pipeline.git
-cd deepthon_pipeline
+# 1. Clone and sync the workspace
+git clone https://github.com/Ibraheem-Al-hafith/deepthon
+cd deepthon
 uv sync
 
-```
-
-### 🪟 Windows
-
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.sh | iex"
-git clone https://github.com/Ibraheem-Al-hafith/deepthon_pipeline.git
-cd deepthon_pipeline
-uv sync
+# 2. Activate environment
+# Windows:
+.venv/Scripts/activate
+# Mac/Linux:
+source .venv/bin/activate
 
 ```
 
 ---
 
-## 🖥️ Usage Modes
+# 🚀 Minimal Experiment
 
-### 1. Interactive GUI
+You can build and train a model programmatically using the core library:
 
-Launch the **Gradio** dashboard to test models in real-time with a visual interface.
+```python
+from deepthon.nn import Sequential, Layer
+from deepthon.nn.activations import ReLU, Sigmoid
+from deepthon.nn.optimizers import Adam
+from deepthon.pipeline import Trainer
 
-```bash
-python -m src.deepthon_pipeline.ui.app serve
+model = Sequential([
+    Layer(2, 16, activation=ReLU()),
+    Layer(16, 1, activation=Sigmoid())
+])
 
-```
-
-### 2. CLI Training & Testing
-
-Run experiments using modular YAML configurations.
-
-```bash
-# Train using a config file
-python -m src.deepthon_pipeline.cli.main train configs/config.yaml
-
-# Evaluate specific checkpoints
-python -m src.deepthon_pipeline.cli.main test configs/config.yaml runs/exp/model.npz cancer tiny
+trainer = Trainer(model=model, optimizer=Adam(lr=1e-3), loss_func=BCE())
+trainer.train(X, y, epochs=30)
 
 ```
 
 ---
 
-## ⚙️ Example Configuration (`config.yaml`)
+# 🏃 Pipeline & Automation (Experiments)
+
+Beyond the library, **deepthon** includes a production-ready pipeline in the `/experiments` directory. This allows you to run reproducible experiments without writing Python code for every trial.
+
+### 1. Config-Driven Training
+
+Define your entire experiment—architecture, dataset, and hyperparameters—in a `config.yaml` file:
+
 
 ```yaml
-experiment: research_v1
+experiment: turbines_experiment
 datasets:
+  mnist:
+    name: mnist
+    input_dim: 784
+    output_dim: 10
+    urls:
+      train_images: [https://raw.githubusercontent.com/fgnt/mnist/master/train-images-idx3-ubyte.gz](https://raw.githubusercontent.com/fgnt/mnist/master/train-images-idx3-ubyte.gz)
+      train_labels: [https://raw.githubusercontent.com/fgnt/mnist/master/train-labels-idx1-ubyte.gz](https://raw.githubusercontent.com/fgnt/mnist/master/train-labels-idx1-ubyte.gz)
+    train_config:
+      loss_fn: CCE
+      metric: f1
   cancer:
     name: cancer
     input_dim: 30
@@ -115,39 +131,101 @@ model:
       - [Dropout, 0.2]
       - [64, null, linear]
 
+training:
+  batch_size: 64
+  epochs: 100
+  optimizer:
+    name: adamw
+    lr: 0.001
+
 ```
 
 ---
 
-## 🗂️ Project Structure
+
+### 2. CLI Interface
+
+Run experiments directly from your terminal using the built-in CLI:
+
+```bash
+# Train a model based on a config
+uv run python -m experiments.deepthon_pipeline.cli.main train --config experiments/configs/config.yaml
+
+```
+
+### 3. Interactive UI
+
+Launch a **Gradio** or **Streamlit** dashboard to visualize data and test your models:
+
+```bash
+uv run python -m experiments.deepthon_pipeline.ui.app
+
+```
+
+---
+
+# 🗂 Codebase
 
 ```text
-deepthon_pipeline/
-├─ configs/      📄 Experiment YAML templates
-├─ src/
-│  └─ deepthon/  🧠 Core Framework (Layers, Optimizers, Losses)
-│  └─ pipeline/  📦 Data Loaders, Runner & Trainer logic
-│  └─ cli/       🖥️ Command Line Interface
-│  └─ ui/        📺 Gradio Web Interface
-└─ tests/        🧪 Pytest suite
+.
+├── assets/                    # Project-wide media (demos, global images)
+├── data/                      # Data storage
+│   ├── processed/             # Cleaned .npy files (MNIST, Cancer, Turbines)
+│   └── raw_mnist/             # Original byte files
+├── deepthon_lib/              # 🧠 THE CORE LIBRARY (Package 1)
+│   ├── deepthon/              # Source code
+│   │   ├── nn/                # Layers, Activations, Losses, Optimizers
+│   │   ├── pipeline/          # Dataloaders and Trainer logic
+│   │   └── utils/             # Metrics and Splitting tools
+│   ├── examples/              # Usage scripts for the library
+│   ├── docs/                  # Documentation files
+│   ├── pyproject.toml         # Library-specific dependencies
+│   └── README.md              # Library-specific documentation
+├── experiments/               # 🏃 THE MLOPS PIPELINE (Package 2)
+│   ├── deepthon_pipeline/     # Source code
+│   │   ├── cli/               # Entry points for Terminal commands
+│   │   ├── config/            # YAML loading logic
+│   │   ├── data/              # Pipeline-specific data registry
+│   │   ├── models/            # Dynamic model builders
+│   │   ├── training/          # Experiment runners
+│   │   └── ui/                # Gradio/Streamlit application
+│   ├── configs/               # YAML experiment definitions
+│   ├── pyproject.toml         # Pipeline-specific dependencies
+│   └── README.md              # Pipeline-specific documentation
+├── tests/                     # 🧪 Unified Test Suite
+├── logs/                      # Experiment output logs
+├── pyproject.toml             # ⚙️ WORKSPACE CONFIG (Root)
+├── uv.lock                    # Global lockfile
+└── README.md                  # Main project landing page
 
 ```
 
 ---
 
-## 🛣️ Roadmap
+# 🧠 Comparison
 
-* [ ] Fully integrated Autograd (Automatic Differentiation)
-* [ ] Convolutional Neural Network (CNN) support
-* [ ] Training visualization dashboard with MLflow
-* [ ] GPU acceleration via CuPy
+| Feature | deepthon | PyTorch |
+| --- | --- | --- |
+| Transparency | ⭐⭐⭐⭐⭐ | ⭐⭐ |
+| Debugging | Easy | Hard |
+| Learning | Excellent | Moderate |
+| Implementation | Explicit | Abstract |
+
+---
+
+# 🛣 Roadmap
+
+* [ ] **CNN Support**: Adding Convolutional and Pooling layers.
+* [ ] **Autograd Engine**: Moving from manual to automatic differentiation.
+* [ ] **Model Serialization**: Save/Load models as JSON/HDF5.
+* [ ] **CuPy Backend**: GPU acceleration for large-scale NumPy ops.
 
 ---
 
-## 📜 License & Acknowledgment
+<div align="center">
 
-Distributed under the **MIT License**. This project was developed as part of a commitment to making deep learning research accessible and mathematically transparent.
+Built with ❤️ by **Ibraheem Al-Hafith** *Where deep learning meets mathematics.*
 
-**Happy hacking! 🚀🧠**
+</div>
 
----
+```
