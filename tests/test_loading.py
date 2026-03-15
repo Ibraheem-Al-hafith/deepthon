@@ -1,17 +1,18 @@
 from pathlib import Path
-from src.deepthon_pipeline.cli.commands import load_config
-from src.deepthon_pipeline.data.data.base import *
-def test_mnist_loading(config_path):
+from experiments.deepthon_pipeline.cli.commands import load_config
+from experiments.deepthon_pipeline.data.base import MNISTLoader, BreastCancerLoader, TurbinesLoader
+cfg = "experiments/configs/config.yaml"
+
+def test_mnist_loading(config_path = cfg):
     cfg = load_config(config_path)
     loader = MNISTLoader(cfg.datasets.mnist)
-    loader.load()
+    loader.get_data()
 
-def test_cancer_loading(config_path):
+def test_cancer_loading(config_path = cfg):
     cfg = load_config(config_path)
-    loader = BREAST_CANCER_LOADER(cfg.datasets.__getattr__("cancer"))
-    loader.load()
-def test_turbines_loading(config_path):
+    loader = BreastCancerLoader(cfg.datasets.__getattr__("cancer"))
+    loader.get_data()
+def test_turbines_loading(config_path = cfg):
     cfg = load_config(config_path)
-    loader = TURBINES_LOADER(cfg.datasets.turbines)
-    loader.load()
-cfg = "configs/mnist.yaml"
+    loader = TurbinesLoader(cfg.datasets.turbines)
+    loader.get_data()
