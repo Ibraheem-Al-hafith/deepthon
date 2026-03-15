@@ -212,6 +212,10 @@ __marimo__/
 # mine
 /archive
 experiments.ipynb
-/data
-/runs
+./data
+/data/processed
+/data/processed/cancer
+/data/raw_mnist
+runs
 /logs
+logs
