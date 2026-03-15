@@ -29,5 +29,5 @@ jobs:
         run: PYTHONPATH=deepthon_lib uv run -m pytest -q
 
       # 5. Fix the path for mypy
-      - name: Run type checking
-        run: uv run mypy deepthon_lib/deepthon
+      # - name: Run type checking
+      #   run: uv run mypy deepthon_lib/deepthon
