@@ -143,8 +143,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-.venv/
-.uv/
 
 # Spyder project settings
 .spyderproject
@@ -210,8 +208,6 @@ __marimo__/
 
 
 # mine
-/archive
-experiments.ipynb
 /data
 /runs
 /logs

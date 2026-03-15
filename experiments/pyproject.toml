@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "experiments"
+version = "0.1.0"
+description = "End-to-end deep learning pipeline built on top of the Deepthon NumPy-based library"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+authors = [
+  { name = "Ibraheem Al-Hafith" }
+]
+
+dependencies = [
+  "numpy>=1.23",
+  "scikit-learn>=1.2",
+  "matplotlib>=3.7",
+  "seaborn>=0.13",
+  "PyYAML>=6.0",
+  "gradio>=4.0",
+  "kagglehub>=0.4",
+  "deepthon",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "black",
+  "ruff"
+]
+
+
+[tool.setuptools.packages.find]
+where = ["deepthon_pipeline"]
+
+[tool.uv.sources]
+deepthon = { workspace = true }
