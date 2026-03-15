@@ -539,11 +539,19 @@ dependencies = [
     { name = "experiments" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "deepthon", editable = "deepthon_lib" },
     { name = "experiments", editable = "experiments" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.2" }]
 
 [[package]]
 name = "exceptiongroup"

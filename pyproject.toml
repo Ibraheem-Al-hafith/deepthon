@@ -14,3 +14,8 @@ package = false # this tells uv not to try and install the root as a package
 [tool.uv.sources]
 deepthon = {workspace = true}
 experiments = {workspace = true}
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
