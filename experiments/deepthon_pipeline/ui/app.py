@@ -4,6 +4,15 @@ from ..config.loader import load_config
 from ..training.runner import ExperimentRunner
 from ..cli.commands import cmd_train
 
+from ..utils.logging import setup_logging, get_logger
+
+# 1. Initialize the global deepthon logging system
+# Ideally, we pass the default config path here
+setup_logging("experiments/configs/config.yaml")
+
+# 2. Get the logger for this specific module
+logger = get_logger(__name__)
+
 def get_config_info(config_path):
     """Helper to extract dataset and model keys for the UI."""
     try:
@@ -41,12 +50,19 @@ def resolve_ckpt(config_path, dataset, model):
         return None
 
 def run_train_gui(config_path, datasets, models, resume):
+    logger.info(f"Initiating GUI Training: Datasets={datasets}, Models={models}")
+    
     ds_list = "all" if "all" in datasets else datasets
     md_list = "all" if "all" in models else models
+    
     try:
+        # This will now use the handlers configured in setup_logging!
         cmd_train(config_path, ds_list, md_list, resume=resume)
+        
+        logger.info("GUI Training Matrix completed successfully.")
         return f"✅ Training Finished. Check 'runs' folder."
     except Exception as e:
+        logger.error(f"GUI Training Failed: {str(e)}", exc_info=True)
         return f"❌ Error: {str(e)}"
 
 def run_test_smart_gui(config_path, dataset, model):
@@ -90,12 +106,24 @@ def load_all_plots(config_path):
     except:
         return [], "Error scanning plots."
 
+def update_logs(config_path):
+    try:
+        cfg = load_config(config_path)
+        log_file = Path("logs") / f"{cfg.get('experiment', 'run')}.log"
+        if log_file.exists():
+            # Return last 20 lines
+            with open(log_file, "r") as f:
+                return "\n".join(f.readlines())
+        return "Log file not found yet. Start training to generate logs."
+    except:
+        return "Error loading logs."
+
 # --- UI Layout ---
 with gr.Blocks(title="Deepthon Pipeline Dashboard") as demo:
     gr.Markdown("# 🧠 Deepthon Pipeline GUI")
     
     with gr.Row():
-        config_input = gr.Textbox(label="Config Path", value="configs/config.yaml")
+        config_input = gr.Textbox(label="Config Path", value="experiments/configs/config.yaml")
         load_btn = gr.Button("🔍 Sync Config", variant="secondary")
 
     with gr.Tabs():
@@ -131,6 +159,10 @@ with gr.Blocks(title="Deepthon Pipeline Dashboard") as demo:
         with gr.TabItem("🚩 Plots"):
             plot_status = gr.Markdown("Sync config to view plots")
             result_gallery = gr.Gallery(label="Results", columns=3, height="auto")
+    
+        with gr.TabItem("⚙️ System Logs"):
+            log_output = gr.Textbox(label="Live Log Stream", lines=15)
+            refresh_logs = gr.Button("🔄 Refresh Logs")
 
     # Interactivity
     load_btn.click(
@@ -144,6 +176,9 @@ with gr.Blocks(title="Deepthon Pipeline Dashboard") as demo:
     test_btn.click(run_test_smart_gui, [config_input, test_ds, test_md], [test_metrics, test_plot])
     
     dl_btn.click(download_model_gui, [config_input, dl_ds, dl_md], file_out)
+
+    refresh_logs.click(update_logs, inputs=config_input, outputs=log_output)
+
 
 if __name__ == "__main__":
     demo.launch(theme=gr.themes.Soft())

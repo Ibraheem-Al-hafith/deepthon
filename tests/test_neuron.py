@@ -36,7 +36,7 @@ def test_neuron():
 
     # 4. Train Scikit-Learn Logistic Regression for benchmarking
     print("\n--- Training Scikit-Learn LogisticRegression ---")
-    sk_model: LogisticRegression = LogisticRegression(C=np.inf)
+    sk_model: LogisticRegression = LogisticRegression()
     sk_model.fit(X_float, y)
 
     # 5. Result Comparison
@@ -55,6 +55,3 @@ def test_neuron():
 
     print(f"\nCustom Accuracy: {custom_acc * 100:.2f}%")
     print(f"Sklearn Accuracy: {sk_acc * 100:.2f}%")
-
-if __name__ == "__main__":
-    test_neuron()

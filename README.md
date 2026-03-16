@@ -13,7 +13,7 @@
 [![Status](https://img.shields.io/badge/Status-Research--Grade-orange?style=for-the-badge)](#)
 [![Stars](https://img.shields.io/github/stars/Ibraheem-Al-hafith/deepthon?style=social)](https://github.com/Ibraheem-Al-hafith/deepthon)
 
-<img src="./assets/img.png" width="50%" height="50%" style="border-radius:10% "/>
+<img src="./assets/header.png" width="50%" height="50%" style="border-radius:10% "/>
 
 ---
 
@@ -51,22 +51,36 @@ Modern deep learning frameworks hide critical details behind automatic different
 
 ---
 
-# 📦 Installation
-This project uses **uv** for high-performance workspace management.
+
+## 🛠️ Installation & Setup
+
+We recommend using **uv** for fast, reproducible environment management.
+
+### 🐧 Linux / 🍎 Mac
 
 ```bash
-# 1. Clone and sync the workspace
-git clone https://github.com/Ibraheem-Al-hafith/deepthon
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone and setup project
+git clone https://github.com/Ibraheem-Al-hafith/deepthon.git
 cd deepthon
 uv sync
 
-# 2. Activate environment
-# Windows:
-.venv/Scripts/activate
-# Mac/Linux:
-source .venv/bin/activate
+```
+
+### 🪟 Windows
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.sh | iex"
+git clone https://github.com/Ibraheem-Al-hafith/deepthon_pipeline.git
+cd deepthon
+uv sync
 
 ```
+
+---
+
 
 ---
 
@@ -75,11 +89,14 @@ source .venv/bin/activate
 You can build and train a model programmatically using the core library:
 
 ```python
-from deepthon.nn import Sequential, Layer
 from deepthon.nn.activations import ReLU, Sigmoid
 from deepthon.nn.optimizers import Adam
+from deepthon.nn.losses import BCE
 from deepthon.pipeline import Trainer
+import numpy as np
 
+X = np.random.randn(100, 2)
+y = np.random.randint(0, 2, 100).reshape(-1, 1)
 model = Sequential([
     Layer(2, 16, activation=ReLU()),
     Layer(16, 1, activation=Sigmoid())
@@ -148,8 +165,14 @@ training:
 Run experiments directly from your terminal using the built-in CLI:
 
 ```bash
-# Train a model based on a config
-uv run python -m experiments.deepthon_pipeline.cli.main train --config experiments/configs/config.yaml
+```bash
+# Train using a config file
+python -m experiments.deepthon_pipeline.cli.main train --config experiments/configs/config.yaml
+
+# Evaluate specific checkpoints
+python -m experiments.deepthon_pipeline.cli.main test --config experiments/configs/config.yaml --model tiny --dataset mnist
+
+```
 
 ```
 
@@ -228,4 +251,65 @@ Built with ❤️ by **Ibraheem Al-Hafith** *Where deep learning meets mathemati
 
 </div>
 
+
+
+To create a cohesive final README for your project, I have integrated the technical depth of **deepthon** (the core engine) with the functional power of **deepthon_pipeline** (the execution layer). This combined structure presents your work as a complete ecosystem: a mathematical framework and a professional automation tool.
+
+---
+
+# 🧠 **deepthon & deepthon_pipeline**
+
+### *A Minimal Deep Learning Framework & End-to-End Pipeline Built from Scratch with NumPy*
+
+<div align="center">
+<img src="assets/img.png" alt="Deepthon Pipeline Header" width="600">
+</div>
+
+## **Research-oriented • Transparent • Modular • Lightweight**
+
+---
+
+## 📜 Abstract
+
+**deepthon** is a **from-scratch neural network framework** designed to expose the mathematical systems behind modern AI. While production frameworks hide details behind automatic differentiation, **deepthon** treats neural networks as transparent numerical systems.
+
+**deepthon_pipeline** is the production-ready automation layer built on top of this engine. It demonstrates a complete machine learning lifecycle—from raw data ingestion to interactive deployment—using a clean, hackable design.
+
+---
+
+## 🧩 Key Features & Benchmarks
+
+* **Mathematical Transparency:** Implements forward propagation, backpropagation, and gradient-based optimization using only NumPy.
+* **Modular Pipeline:** A standardized workflow for data cleaning, stratified binning, and evaluation.
+* **Built-in Benchmarks:**
+* 🩺 **Breast Cancer:** Binary classification for medical diagnosis.
+* ✍️ **MNIST:** Multi-class handwritten digit recognition.
+* ⚡ **Turbine Energy:** Regression for industrial sensor data.
+
+
+
+| Feature | deepthon Ecosystem | Standard Frameworks |
+| --- | --- | --- |
+| **Autograd** | ❌ Under Dev | ✅ Yes |
+| **Transparency** | ⭐⭐⭐⭐⭐ | ⭐⭐ |
+| **Debug Mode** | Mathematics-first | Op-code-first |
+| **Dependencies** | NumPy only | Heavy |
+
+---
+## 🖥️ Usage Modes
+
+### 1. Interactive GUI
+
+Launch the **Gradio** dashboard to test models in real-time with a visual interface.
+
+```bash
+python -m src.deepthon_pipeline.ui.app serve
+
 ```
+
+### 2. CLI Training & Testing
+
+Run experiments using modular YAML configurations.
+
+
+

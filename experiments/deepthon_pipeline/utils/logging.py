@@ -5,63 +5,63 @@ This module exposes a configurable logger factory to ensure consistent
 logging behavior across pipeline components (data, models, training,
 evaluation, orchestration, CLI, UI, etc.).
 """
-
-from __future__ import annotations
 import logging
-from logging import Logger
 from pathlib import Path
+from typing import Optional
 from ..config.loader import load_config
 
 _DEFAULT_FORMAT = (
-    "%(asctime)s | %(levelname)-8s | %(name)s |"
+    "%(asctime)s | %(levelname)-8s | %(name)s | "
     "%(funcName)s:%(lineno)d | %(message)s"
 )
 
-_LOGGERS: dict[str, Logger] = {}    # cache to avoid duplicate handlers
-# src/deepthon_pipeline/utils/logging.py
+BASE_LOGGER_NAME = "deepthon"
 
-# ... (imports and _DEFAULT_FORMAT remain same) ...
+def get_logger(module_name: Optional[str] = None) -> logging.Logger:
+    """
+    Returns a logger prefixed with the base project name.
+    Usage: get_logger(__name__) -> deepthon.experiments.data.loader
+    """
+    # Ensure the name is always deepthon.something
+    if module_name and not module_name.startswith(BASE_LOGGER_NAME):
+        full_name = f"{BASE_LOGGER_NAME}.{module_name}"
+    else:
+        full_name = module_name or BASE_LOGGER_NAME
+        
+    return logging.getLogger(full_name)
 
-# 1. Use a consistent base name for the whole project
-BASE_LOGGER_NAME = "src" 
-
-def get_logger(name: str = BASE_LOGGER_NAME) -> Logger:
-    """Returns a logger. If it's a child, it will propagate to 'src'."""
-    logger = logging.getLogger(name)
-    
-    # IMPORTANT: Do not add handlers or set propagate=False here 
-    # if it's a child logger. Just set the level.
-    logger.setLevel(logging.INFO) 
-    return logger
-
-def logger_from_config(config_path: str|Path) -> Logger:
+def setup_logging(config_path: str | Path):
+    """
+    Configures the ROOT 'deepthon' logger. 
+    Call this ONCE at the start of your CLI or App.
+    """
     cfg = load_config(config_path)
-    logging_cfg = cfg.get("logging", {})
+    # Get the 'logging' section or default to empty dict
+    log_cfg = cfg.get("logging", {}) 
     
-    # 2. We always configure the TOP LEVEL logger ("src")
     root_logger = logging.getLogger(BASE_LOGGER_NAME)
-    root_logger.setLevel(logging_cfg.get("level", "INFO"))
+    root_logger.setLevel(log_cfg.get("level", "INFO").upper())
     
-    # Clear existing handlers to prevent duplicates if called twice
+    # Avoid duplicate handlers if setup is called multiple times
     if root_logger.hasHandlers():
         root_logger.handlers.clear()
 
-    formatter = logging.Formatter(fmt=_DEFAULT_FORMAT)
+    formatter = logging.Formatter(_DEFAULT_FORMAT)
 
-    # Console Handler
-    ch = logging.StreamHandler()
-    ch.setFormatter(formatter)
-    root_logger.addHandler(ch)
+    # 1. Console Output
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
 
-    # File Handler
-    if logging_cfg.get("to_file", False):
-        log_dir = Path(logging_cfg.get("log_dir", "logs"))
+    # 2. File Output
+    if log_cfg.get("to_file", False):
+        log_dir = Path(log_cfg.get("log_dir", "logs"))
         log_dir.mkdir(parents=True, exist_ok=True)
         
-        # We can still name the FILE after the experiment
-        exp_name = cfg.get("experiment", "run")
-        fh = logging.FileHandler(log_dir / f"{exp_name}.log")
-        fh.setFormatter(formatter)
-        root_logger.addHandler(fh)
-
-    return root_logger
+        # Use experiment name from config for the filename
+        filename = f"{cfg.get('experiment', 'deepthon_run')}.log"
+        file_handler = logging.FileHandler(log_dir / filename)
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+    
+    root_logger.info(f"Logging initialized at level {root_logger.level}")

@@ -1,7 +1,7 @@
 from pathlib import Path
 import argparse
 from .commands import cmd_train, cmd_test_all, cmd_test
-from ..utils.logging import get_logger, logger_from_config
+from ..utils.logging import setup_logging, get_logger
 from ..training.runner import ExperimentRunner
 from ..config.loader import load_config
 
@@ -29,7 +29,8 @@ def main():
     subparsers.add_parser("test-all", help="Test all models in experiment").add_argument("--config", required=True)
 
     args = parser.parse_args()
-    logger = logger_from_config(args.config)
+    setup_logging(args.config)
+    logger = get_logger(__name__)
     logger.info("Starting Experiment")
 
     if args.command == "train":
