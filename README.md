@@ -20,7 +20,7 @@
 ### **Table of Contents**
 [Abstract](#-abstract) • [Motivation](#-motivation) • [Features](#-features) • [Installation](#-installation) 
 [Minimal Experiment](#-minimal-experiment) • [Pipeline & Automation](#-pipeline--automation-experiments) •
-[Codebase](#-codebase) • [Comparison](#-comparison) • [Roadmap](#-roadmap)
+[Codebase](#-codebase) • [Comparison](#-comparison) • [Roadmap](#-roadmap) • [Experiments Demo](#experiments-demo-video-)
 
 </div>
 
@@ -165,14 +165,11 @@ training:
 Run experiments directly from your terminal using the built-in CLI:
 
 ```bash
-```bash
 # Train using a config file
 python -m experiments.deepthon_pipeline.cli.main train --config experiments/configs/config.yaml
 
 # Evaluate specific checkpoints
 python -m experiments.deepthon_pipeline.cli.main test --config experiments/configs/config.yaml --model tiny --dataset mnist
-
-```
 
 ```
 
@@ -245,71 +242,12 @@ uv run python -m experiments.deepthon_pipeline.ui.app
 
 ---
 
+# Experiments Demo Video :
+
+https://github.com/Ibraheem-Al-hafith/deepthon/issues/4#issue-4088394690
+
 <div align="center">
 
 Built with ❤️ by **Ibraheem Al-Hafith** *Where deep learning meets mathematics.*
 
 </div>
-
-
-
-To create a cohesive final README for your project, I have integrated the technical depth of **deepthon** (the core engine) with the functional power of **deepthon_pipeline** (the execution layer). This combined structure presents your work as a complete ecosystem: a mathematical framework and a professional automation tool.
-
----
-
-# 🧠 **deepthon & deepthon_pipeline**
-
-### *A Minimal Deep Learning Framework & End-to-End Pipeline Built from Scratch with NumPy*
-
-<div align="center">
-<img src="assets/img.png" alt="Deepthon Pipeline Header" width="600">
-</div>
-
-## **Research-oriented • Transparent • Modular • Lightweight**
-
----
-
-## 📜 Abstract
-
-**deepthon** is a **from-scratch neural network framework** designed to expose the mathematical systems behind modern AI. While production frameworks hide details behind automatic differentiation, **deepthon** treats neural networks as transparent numerical systems.
-
-**deepthon_pipeline** is the production-ready automation layer built on top of this engine. It demonstrates a complete machine learning lifecycle—from raw data ingestion to interactive deployment—using a clean, hackable design.
-
----
-
-## 🧩 Key Features & Benchmarks
-
-* **Mathematical Transparency:** Implements forward propagation, backpropagation, and gradient-based optimization using only NumPy.
-* **Modular Pipeline:** A standardized workflow for data cleaning, stratified binning, and evaluation.
-* **Built-in Benchmarks:**
-* 🩺 **Breast Cancer:** Binary classification for medical diagnosis.
-* ✍️ **MNIST:** Multi-class handwritten digit recognition.
-* ⚡ **Turbine Energy:** Regression for industrial sensor data.
-
-
-
-| Feature | deepthon Ecosystem | Standard Frameworks |
-| --- | --- | --- |
-| **Autograd** | ❌ Under Dev | ✅ Yes |
-| **Transparency** | ⭐⭐⭐⭐⭐ | ⭐⭐ |
-| **Debug Mode** | Mathematics-first | Op-code-first |
-| **Dependencies** | NumPy only | Heavy |
-
----
-## 🖥️ Usage Modes
-
-### 1. Interactive GUI
-
-Launch the **Gradio** dashboard to test models in real-time with a visual interface.
-
-```bash
-python -m src.deepthon_pipeline.ui.app serve
-
-```
-
-### 2. CLI Training & Testing
-
-Run experiments using modular YAML configurations.
-
-
-
