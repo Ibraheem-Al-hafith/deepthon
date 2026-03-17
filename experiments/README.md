@@ -2,7 +2,7 @@
 # 🚀 deepthon_pipeline
 
 <div align="center">
-  <img src="assets/img.png" alt="Deepthon Pipeline Header" width="600">
+  <img src="../assets/img.png" alt="Deepthon Pipeline Header" width="600">
 </div>
 <div align="center">
 
