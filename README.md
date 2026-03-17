@@ -244,7 +244,7 @@ uv run python -m experiments.deepthon_pipeline.ui.app
 
 # Experiments Demo Video :
 
-https://github.com/Ibraheem-Al-hafith/deepthon/issues/4#issue-4088394690
+https://github.com/user-attachments/assets/a50e7604-2e9a-456f-bdb3-f56cebd75c0f
 
 <div align="center">
 
