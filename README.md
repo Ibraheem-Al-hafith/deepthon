@@ -1,4 +1,8 @@
 
+# Experiments Demo Video :
+
+https://github.com/user-attachments/assets/a50e7604-2e9a-456f-bdb3-f56cebd75c0f
+
 ---
 
 <div align="center">
@@ -20,7 +24,7 @@
 ### **Table of Contents**
 [Abstract](#-abstract) • [Motivation](#-motivation) • [Features](#-features) • [Installation](#-installation) 
 [Minimal Experiment](#-minimal-experiment) • [Pipeline & Automation](#-pipeline--automation-experiments) •
-[Codebase](#-codebase) • [Comparison](#-comparison) • [Roadmap](#-roadmap) • [Experiments Demo](#experiments-demo-video-)
+[Codebase](#-codebase) • [Comparison](#-comparison) • [Roadmap](#-roadmap) 
 
 </div>
 
@@ -242,9 +246,6 @@ uv run python -m experiments.deepthon_pipeline.ui.app
 
 ---
 
-# Experiments Demo Video :
-
-https://github.com/user-attachments/assets/a50e7604-2e9a-456f-bdb3-f56cebd75c0f
 
 <div align="center">
 
